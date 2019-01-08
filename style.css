@@ -17,6 +17,10 @@ p    {
 	text-align: center;
 }
 
+div {
+	word-wrap: break-word;
+}
+
 ul	 {
 	list-style-type: none;
 	margin: 0;
