@@ -71,8 +71,8 @@ li a:hover:not(.active) {
 	margin: 0;
 	padding: 0;
 	text-align: center;
-	position: -webkit-sticky;
-	position: sticky;
+	/*position: -webkit-sticky;
+	position: sticky;*/
 }
 
 .nav li   {
