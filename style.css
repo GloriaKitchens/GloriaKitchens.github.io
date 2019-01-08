@@ -20,8 +20,8 @@ p    {
 iframe {
 	width: 480;
 	height: 285;
-	margin-right: auto;
-	margin-left: auto; 
+	/*margin-right: auto;
+	margin-left: auto; */
 }
 
 ul	 {
