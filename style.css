@@ -17,6 +17,13 @@ p    {
 	text-align: center;
 }
 
+iframe {
+	width: 480;
+	height: 285;
+	margin-right: auto;
+	margin-left: auto;
+}
+
 ul	 {
 	list-style-type: none;
 	margin: 0;
