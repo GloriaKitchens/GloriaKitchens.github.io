@@ -46,7 +46,7 @@ li a.active {
 }
 
 li a.normal {
-	display: none;
+	/*display: none;*/
 	padding: 0px;
 }
 li a:hover:not(.active) {
