@@ -2,17 +2,21 @@ body {
 	background-color:white;
 }
 
-h1 	 {
+h1 {
 	font-family: 'Petit Formal Script', cursive;
 	text-align: center;
 	font-size: 56px;
 }
 
-h2	 {
+h2 {
 	font-family: 'Slabo 13px', serif;
 }
 
-p    {
+h3 {
+	font-family: 'Lucida Console', monospace;
+}
+
+p {
 	font-family: 'Slabo 27px', serif;
 	font-size: 16px;
 	text-align: center;
