@@ -18,8 +18,10 @@ p    {
 }
 
 iframe {
-	/*display: flex;*/
-	text-align: center;
+	width: 480;
+	height: 285;
+	margin-right: auto;
+	margin-left: auto; 
 }
 
 ul	 {
