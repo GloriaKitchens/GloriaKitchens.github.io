@@ -17,6 +17,11 @@ p    {
 	text-align: center;
 }
 
+iframe {
+	display: flex;
+	justify-content: center;
+}
+
 ul	 {
 	list-style-type: none;
 	margin: 0;
