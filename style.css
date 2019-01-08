@@ -24,7 +24,15 @@ h3.links {
 p {
 	font-family: 'Slabo 27px', serif;
 	font-size: 16px;
-	text-align: center;
+	/*text-align: center;*/
+}
+
+p.right {
+	text-align: right;
+}
+
+p.left {
+	text-align: left;
 }
 
 div {
