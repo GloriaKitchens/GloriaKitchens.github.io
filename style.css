@@ -45,6 +45,10 @@ li a.active {
 	color: white;
 }
 
+li a.normal {
+	display: none;
+	padding: 0px;
+}
 li a:hover:not(.active) {
 	background-color: #83E3F9;
 	color: white;
