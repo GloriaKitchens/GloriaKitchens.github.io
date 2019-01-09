@@ -21,6 +21,10 @@ h3.links {
 	margin-left: 20px;
 }
 
+img.tpin {
+	border: 10px;
+}
+
 p {
 	font-family: 'Slabo 27px', serif;
 	font-size: 18px;
