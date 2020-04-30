@@ -8,9 +8,9 @@
     --transition-speed: 600ms;
 }
 
-html {
+/* html {
     scroll-behavior: smooth;
-}
+} */
 
 body {
     color: black;

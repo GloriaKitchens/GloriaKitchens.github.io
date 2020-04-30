@@ -9,22 +9,34 @@ class="fas fa-scroll"
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="utf-8"/>
+    <title>Gloria Kitchens</title>
+    <link rel="icon" href="images/website-icon.png" type="image/x-icon">
     <link rel="stylesheet" type="text/css" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.13.0/css/all.css" integrity="sha384-Bfad6CLCknfcloXFOyFnlgtENryhrpZCe29RTifKEixXQZ38WheV+i/6YWSzkz3V" crossorigin="anonymous">
     <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
     <script src="myScript.js"></script>
 </head>
 <body>
+    <!-- <script>
+        $(document).ready(function() {
+        $("a").on('click', function(event) {
+        if (this.hash !== "") {
+            event.preventDefault();
+            var hash = this.hash;
+
+            $('html, body').animate({scrollTop: $(hash).offset().top}, 800, function() {
+                window.location.hash = hash;
+                });
+            }
+        });
+    });
+    </script> -->
     <div id=nav-placeholder>
 
     </div>
-    <script>
-        // put navbar on multiple pages
-        $(function() {
-            $("#nav-placeholder").load("nav.html");
-        });
-    </script>
     
     <main>
         <div class="transSection">
