@@ -1,5 +1,5 @@
 TODO:
-- smooth page scroll oooooo hehehe
+- DONE: (can't tell the difference hmmm)smooth page scroll oooooo hehehe
 - make transitions between each section on the page
 - make animation when the page first loads
 - figure out small and large screens and problems with navbar
