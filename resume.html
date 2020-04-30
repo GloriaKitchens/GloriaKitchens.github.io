@@ -1,31 +1,26 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>Resume</title>
-	<link rel="icon" type="image/ico" href="https://gloriakitchens.github.io/images/pixelgirl-1.png">
-	<link href="https://fonts.googleapis.com/css?family=Staatliches" rel="stylesheet">
-	<link href="https://fonts.googleapis.com/css?family=Slabo+27px|Staatliches" rel="stylesheet">
-	<link href="https://fonts.googleapis.com/css?family=Slabo+13px|Slabo+27px|Staatliches" rel="stylesheet">
-	<link href="https://fonts.googleapis.com/css?family=Petit+Formal+Script|Slabo+13px|Slabo+27px|Staatliches" rel="stylesheet">
-	<link rel="stylesheet" href="style.css">
-</head>
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.13.0/css/all.css" integrity="sha384-Bfad6CLCknfcloXFOyFnlgtENryhrpZCe29RTifKEixXQZ38WheV+i/6YWSzkz3V" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
+    <script src="myScript.js"></script>
 
-<body>
-<ul class="nav">
-	<li><a href="https://gloriakitchens.github.io/index.html">
-		<h2>HOME</h2>
-		</a></li>
-	<li><a class="active" href="https://gloriakitchens.github.io/resume.html">
-		<h2>RESUME</h2>
-		</a></li>
-	<li><a href="https://gloriakitchens.github.io/projects.html">
-		<h2>PROJECTS</h2>
-		</a></li>
-</ul>
-<div style="margin-top: 60px";>
-<a href="https://gloriakitchens.github.io/documents/Jan2019%20Academic%20Resume.pdf">
-	<p style="text-align: center;">Click to view resume.</p>
-</a>
-</div>
-</body>
+</head>
+    <body>
+        <div id=nav-placeholder>
+
+        </div>
+        <script>
+            // put navbar on multiple pages
+            $(function() {
+                $("#nav-placeholder").load("nav.html");
+            });
+        </script>
+        <main>
+            <p>Hello!</p>
+        </main>
+        
+    </body>
 </html>

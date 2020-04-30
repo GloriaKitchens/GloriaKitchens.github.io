@@ -1,102 +1,157 @@
+:root {
+    font-size: 16px;
+    font-family: 'Open Sans';
+    --text-primary: #b6b6b6;
+    --text-secondary: #ececec;
+    --bg-primary: #23232e;
+    --bg-secondary: #141418;
+    --transition-speed: 600ms;
+}
+
 body {
-	background-color:white;
+    color: black;
+    background-color: white;
+    margin: 0;
+    padding: 0;
 }
 
-h1 {
-	font-family: 'Petit Formal Script', cursive;
-	text-align: center;
-	font-size: 56px;
+body::-webkit-scrollbar {
+    width: 0.45rem;
 }
 
-h2 {
-	font-family: 'Slabo 13px', serif;
+body::-webkit-scrollbar-track {
+    background: var(--text-primary);
 }
 
-h3 {
-	font-family: 'Lucida Console', monospace;
+body::-webkit-scrollbar-thumb {
+    background:#f88bce;
 }
 
-h3.links {
-	text-decoration: none;
-	margin-left: 20px;
+/* ul {
+    list-style-type: none;
+    margin: 0px;
+    padding: 0px;
+} */
+
+main {
+    margin-left: 5rem;
+    padding: 1rem;
 }
 
-p {
-	font-family: 'Slabo 27px', serif;
-	font-size: 18px;
-	/*text-align: center;*/
+.navbar {
+    position: fixed;
+    width: 5rem;
+    height: 100vh;
+    position: fixed;
+    background-color: var(--bg-primary);
+    transition: width 600ms ease;
 }
 
-p.right {
-	text-align: right;
+.navbar-nav {
+    list-style: none;
+    padding: 0rem;
+    margin: 0rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* justify-content: center; */
+    height: 100%;
 }
 
-p.left {
-	text-align: left;
+.nav-item {
+    width:100%;
 }
 
-div {
-	word-wrap: break-word;
+.nav-item:last-child {
+    margin-top: auto;
 }
 
-ul {
-	list-style-type: none;
-	margin: 0;
-	padding: 0;
-	overflow: hidden;
+.navbar:hover {
+    width: 16rem;
 }
 
-li a {
-	display: block;
-	color: #000;
-	padding: 8px 16px;
-	text-decoration: none;
+.nav-link {
+    display: flex;
+    align-items: center;
+    height: 5rem;
+    color: var(--text-primary);
+    text-decoration: none;
+    filter: grayscale(100%) opacity(0.7);
+    transition: var(--transition-speed);
 }
 
-li a.active {
-	background-color: #00ABE0;
-	color: white;
+.nav-link:hover {
+    filter: grayscale(0%) opacity(1);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
 }
 
-li a.normal {
-	/*display: none;*/
-	padding: 0px;
-}
-li a:hover:not(.active) {
-	background-color: #83E3F9;
-	color: white;
-}
-.nav {
-	list-style: none;
-	margin: 0;
-	padding: 0;
-	text-align: center;
-	/*position: -webkit-sticky;
-	position: sticky;*/
+.link-text {
+    display: none;
+    margin-left: 1rem;
 }
 
-.nav li   {
-	display: inline;
+.navbar i {
+    width: 2rem;
+    min-width: 2rem;
+    margin: 0 1.5rem;
+    color: #df49a6;
 }
 
-.nav a  {
-	display: inline-block;
+.transSection {
+    -webkit-transition: all .8s ease-in-out;
+    -moz-transition: all .8s ease-in-out;
+    -o-transition: all .8s ease-in-out;
+    transition: all 0.8s ease-in-out;
 }
 
-::-webkit-scrollbar {
-	width: 10px;
+.transSection:target {
+    margin-top: 0%;
+}
+/* .fa-primary {
+    color: #ff7eee;
 }
 
-::-webkit-scrollbar-track {
-	box-shadow: inset 0 0 5px grey;
-	border-radius: 10px;
+.fa-secondary {
+    color: #df49a6;
 }
 
-::-webkit-scrollbar-thumb {
-	background: grey;
-	border-radius: 10px;
-}
+.fa-primary,
+.fa-secondary {
+    transition: var(--transition-speed);
+} */
 
-::-webkit-scrollbar-thumb:hover {
-	background: #5e5e5e;
+/* small screens */
+/* TODO: figure out why navbar keeps transitioning over on hover */
+/* @media only screen and (max-width: 600px) {
+    .navbar {
+        bottom: 0;
+        width: 100vw;
+        height: 5rem;
+    }
+
+    .navbar-nav {
+        flex-direction: row;
+    }
+
+    .nav-link {
+        justify-content: center;
+    }
+
+    main {
+        margin: 0;
+    }
+}  */
+
+/* large screens */
+@media only screen and (min-width: 600px) {
+    .navbar {
+        top: 0;
+        width: 5rem;
+        height: 100vh;
+    }
+
+    .navbar:hover .link-text {
+        display: inline;
+    }
 }
