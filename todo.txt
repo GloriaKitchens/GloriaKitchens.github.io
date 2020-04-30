@@ -1,0 +1,6 @@
+TODO:
+- smooth page scroll oooooo hehehe
+- make transitions between each section on the page
+- make animation when the page first loads
+- figure out small and large screens and problems with navbar
+- make interactive resume / timeline resume
