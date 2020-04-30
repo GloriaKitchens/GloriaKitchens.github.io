@@ -1,6 +1,6 @@
 TODO:
-- DONE: (can't tell the difference hmmm)smooth page scroll oooooo hehehe
 - WIP: (no working :'( )make transitions between each section on the page (using jQuery)
 - make animation when the page first loads
 - figure out small and large screens and problems with navbar
 - make interactive resume / timeline resume
+- DONE: add title icon (maybe make it bigger)
