@@ -127,7 +127,12 @@
   function buildEpub(title, pageTexts) {
     const zip  = new JSZip();
     const id   = 'book-' + Date.now();
-    const lang = langSelect.value.split('_')[0]; // e.g. "chi_sim" → "chi"
+    // Map Tesseract lang codes to BCP 47 tags required by the EPUB spec
+    const langMap = {
+      eng: 'en', fra: 'fr', deu: 'de', spa: 'es', ita: 'it',
+      por: 'pt', rus: 'ru', chi_sim: 'zh-Hans', jpn: 'ja', ara: 'ar'
+    };
+    const lang = langMap[langSelect.value] || langSelect.value;
 
     // mimetype (must be first and uncompressed)
     zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
@@ -165,8 +170,11 @@
 
   function makeXhtml(title, pageNum, text) {
     const escaped = escapeXml(text);
-    // Preserve line breaks
-    const body = escaped.split('\n').filter(l => l.trim()).map(l => `<p>${l}</p>`).join('\n');
+    // Preserve paragraph structure: blank lines become spacer paragraphs
+    const body = escaped.split('\n').map(l => l.trim()
+      ? `<p>${l}</p>`
+      : `<p>&#160;</p>`
+    ).join('\n');
     return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
