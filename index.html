@@ -1,22 +1,96 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>Utilities</title>
-<link rel="stylesheet" href="styles/styles.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@800&family=Boldonse&display=swap" rel="stylesheet">
-<script src="scripts/script.js"></script>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9370950119264105"
-     crossorigin="anonymous"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scanned PDF to Text EPUB</title>
+  <link rel="stylesheet" href="styles/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;800&family=Boldonse&display=swap" rel="stylesheet">
 </head>
-<body id="body">
-<div class="center">
-    <h1>UTILITIES</h1>
-</div>
-<div class="center">
-    <button id="timerButton" class="button" onclick="navigateToPage()">POMODORO TIMER</button>
-</div>
-</div>
+<body>
+  <div class="page-wrapper">
+
+    <header class="center">
+      <h1>PDF → EPUB</h1>
+      <p class="subtitle">Convert a scanned PDF to a searchable text EPUB — all in your browser</p>
+    </header>
+
+    <main class="card">
+      <!-- File drop zone -->
+      <div class="drop-zone" id="dropZone">
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <polyline points="16 16 12 12 8 16"></polyline>
+          <line x1="12" y1="12" x2="12" y2="21"></line>
+          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+        </svg>
+        <p class="drop-label">Drag &amp; drop a PDF here</p>
+        <p class="drop-or">— or —</p>
+        <label class="button" for="fileInput">Choose PDF</label>
+        <input type="file" id="fileInput" accept=".pdf,application/pdf" hidden>
+        <p class="file-name" id="fileName"></p>
+      </div>
+
+      <!-- Options -->
+      <div class="options-row">
+        <div class="option-group">
+          <label for="bookTitle" class="option-label">Book title</label>
+          <input type="text" id="bookTitle" class="text-input" placeholder="My Book" maxlength="100">
+        </div>
+        <div class="option-group">
+          <label for="langSelect" class="option-label">OCR language</label>
+          <select id="langSelect" class="select">
+            <option value="eng">English</option>
+            <option value="fra">French</option>
+            <option value="deu">German</option>
+            <option value="spa">Spanish</option>
+            <option value="ita">Italian</option>
+            <option value="por">Portuguese</option>
+            <option value="rus">Russian</option>
+            <option value="chi_sim">Chinese (Simplified)</option>
+            <option value="jpn">Japanese</option>
+            <option value="ara">Arabic</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Convert button -->
+      <button class="button button-convert" id="convertBtn" disabled>Convert to EPUB</button>
+
+      <!-- Progress -->
+      <div class="progress-section" id="progressSection" hidden>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progressFill"></div>
+        </div>
+        <p class="progress-label" id="progressLabel">Starting…</p>
+      </div>
+
+      <!-- Result -->
+      <div class="result-section" id="resultSection" hidden>
+        <p class="result-msg">✅ Conversion complete!</p>
+        <a class="button button-download" id="downloadLink" download="book.epub">Download EPUB</a>
+      </div>
+
+      <!-- Error -->
+      <div class="error-section" id="errorSection" hidden>
+        <p class="error-msg" id="errorMsg"></p>
+      </div>
+    </main>
+
+    <footer class="center footer-note">
+      <p>Your PDF never leaves your device — all processing happens locally in your browser.</p>
+    </footer>
+
+  </div>
+
+  <!-- PDF.js for rendering PDF pages to canvas -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Tesseract.js for OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- JSZip for building the EPUB archive -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <script src="scripts/script.js"></script>
 </body>
 </html>
