@@ -80,7 +80,9 @@
       <!-- Debug log -->
       <details class="debug-section" id="debugSection">
         <summary class="debug-summary">Debug log</summary>
-        <textarea class="debug-log" id="debugLog" readonly aria-label="Debug output" aria-live="polite"></textarea>
+        <div role="log" aria-live="polite" aria-relevant="additions">
+          <textarea class="debug-log" id="debugLog" readonly aria-label="Debug output"></textarea>
+        </div>
       </details>
     </main>
 

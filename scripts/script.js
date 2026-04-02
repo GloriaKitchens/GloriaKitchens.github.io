@@ -24,6 +24,7 @@
 
   let selectedFile    = null;
   let currentObjectUrl = null;
+  let debugLines      = []; // buffer for debug log entries
 
   // ── PDF.js worker ─────────────────────────
   pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -185,7 +186,16 @@
           }
         }
       };
-      reader.onload  = (e) => resolve(e.target.result);
+      reader.onload  = (e) => {
+        // Guarantee the 100% milestone is always logged/shown even if onprogress
+        // didn't fire at exactly 100%.
+        if (lastLoggedMilestone < 100) {
+          lastLoggedMilestone = 100;
+          debugLog('  Reading file: 100%');
+          showProgress(10, 'Reading file… 100%');
+        }
+        resolve(e.target.result);
+      };
       reader.onerror = ()  => reject(new Error('Failed to read file'));
       reader.readAsArrayBuffer(file);
     });
@@ -357,7 +367,8 @@ ${body || '<p> </p>'}
 
   function debugLog(msg) {
     const time = new Date().toLocaleTimeString();
-    debugLogEl.value += `[${time}] ${msg}\n`;
+    debugLines.push(`[${time}] ${msg}`);
+    debugLogEl.value = debugLines.join('\n') + '\n';
     debugLogEl.scrollTop = debugLogEl.scrollHeight;
     // Auto-open the details panel when something is logged
     const details = debugLogEl.closest('details');
@@ -365,6 +376,7 @@ ${body || '<p> </p>'}
   }
 
   function clearDebugLog() {
+    debugLines = [];
     debugLogEl.value = '';
   }
 

@@ -281,6 +281,12 @@ h1 {
   list-style: none;
 }
 
+/* Remove the browser's native disclosure triangle */
+.debug-summary::marker,
+.debug-summary::-webkit-details-marker {
+  display: none;
+}
+
 .debug-summary::before {
   content: '▶ ';
   font-size: 0.7rem;
