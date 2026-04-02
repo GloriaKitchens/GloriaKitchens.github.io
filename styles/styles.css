@@ -239,9 +239,18 @@ h1 {
   margin-bottom: 12px;
 }
 
+.error-section {
+  background: #fff0ef;
+  border: 1.5px solid #f5c6c2;
+  border-left: 5px solid #d93025;
+  border-radius: 10px;
+  padding: 14px 18px;
+  text-align: left;
+}
+
 .error-msg {
   font-size: 0.95rem;
-  color: #d93025;
+  color: #b01c13;
   font-weight: 600;
 }
 

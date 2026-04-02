@@ -309,7 +309,8 @@ ${body || '<p> </p>'}
   function showError(msg) {
     progressSection.hidden = true;
     errorSection.hidden    = false;
-    errorMsg.textContent   = msg;
+    // Prefix with a decorative icon hidden from assistive technology
+    errorMsg.innerHTML = '<span aria-hidden="true">⚠️ </span>' + escapeXml(msg);
     convertBtn.disabled    = false;
   }
 
