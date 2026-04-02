@@ -86,6 +86,76 @@
       </details>
     </main>
 
+    <!-- Python script download card -->
+    <section class="card python-card" aria-labelledby="pyScriptHeading">
+      <h2 id="pyScriptHeading" class="python-card-title">🐍 Python Script</h2>
+      <p class="python-card-desc">
+        Prefer to work offline or process large files on the command line?
+        Download the standalone Python script — it does the same OCR-powered
+        PDF → EPUB conversion on your own machine.
+      </p>
+
+      <a class="button button-download" href="pdf_to_epub.py" download="pdf_to_epub.py">
+        Download pdf_to_epub.py
+      </a>
+
+      <div class="python-steps">
+        <h3 class="python-steps-title">How to use it</h3>
+
+        <ol class="python-steps-list">
+          <li>
+            <strong>Install Python 3.8+</strong> from
+            <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">python.org</a>
+            if you don't have it yet.
+          </li>
+          <li>
+            <strong>Install Tesseract OCR</strong> on your system:
+            <ul class="python-sub-list">
+              <li><em>macOS:</em> <code>brew install tesseract</code></li>
+              <li><em>Ubuntu / Debian:</em> <code>sudo apt install tesseract-ocr</code></li>
+              <li>
+                <em>Windows:</em> download the installer from
+                <a href="https://github.com/UB-Mannheim/tesseract/wiki" target="_blank" rel="noopener">UB-Mannheim/tesseract</a>
+              </li>
+            </ul>
+          </li>
+          <li>
+            <strong>Install Python dependencies</strong> in a terminal:
+            <pre class="python-code">pip install pymupdf pytesseract Pillow</pre>
+          </li>
+          <li>
+            <strong>Run the script</strong>:
+            <pre class="python-code">python pdf_to_epub.py scan.pdf</pre>
+            The EPUB is saved next to the PDF with the same base name.
+          </li>
+        </ol>
+
+        <h3 class="python-steps-title">Common options</h3>
+        <pre class="python-code"># Set a custom title and output path
+python pdf_to_epub.py scan.pdf --title "My Novel" --output my_novel.epub
+
+# OCR a French document
+python pdf_to_epub.py scan.pdf --lang fra
+
+# Increase render scale for better accuracy (slower)
+python pdf_to_epub.py scan.pdf --scale 3.0</pre>
+
+        <p class="python-lang-note">
+          <strong>Supported <code>--lang</code> values:</strong>
+          <code>eng</code> (English, default),
+          <code>fra</code> (French),
+          <code>deu</code> (German),
+          <code>spa</code> (Spanish),
+          <code>ita</code> (Italian),
+          <code>por</code> (Portuguese),
+          <code>rus</code> (Russian),
+          <code>chi_sim</code> (Chinese Simplified),
+          <code>jpn</code> (Japanese),
+          <code>ara</code> (Arabic).
+        </p>
+      </div>
+    </section>
+
     <footer class="center footer-note">
       <p>Your PDF never leaves your device — all processing happens locally in your browser.</p>
     </footer>

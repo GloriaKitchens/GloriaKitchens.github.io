@@ -260,6 +260,90 @@ h1 {
   color: rgba(255, 255, 255, 0.8);
 }
 
+/* ── Python script card ── */
+.python-card {
+  max-width: 620px;
+}
+
+.python-card-title {
+  font-family: 'Assistant', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #333;
+}
+
+.python-card-desc {
+  font-size: 0.95rem;
+  color: #555;
+  line-height: 1.55;
+}
+
+.python-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.python-steps-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+.python-steps-list {
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.93rem;
+  color: #444;
+  line-height: 1.55;
+}
+
+.python-sub-list {
+  margin-top: 6px;
+  padding-left: 20px;
+  list-style: disc;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.python-code {
+  background: #fdf0ff;
+  border: 1.5px solid #e8b4f5;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.82rem;
+  color: #5a0a56;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-top: 6px;
+}
+
+.python-lang-note {
+  font-size: 0.88rem;
+  color: #555;
+  line-height: 1.6;
+}
+
+.python-steps-list a,
+.python-card-desc a,
+.python-lang-note a {
+  color: #c040b8;
+  text-decoration: underline;
+}
+
+.python-steps-list a:hover,
+.python-card-desc a:hover,
+.python-lang-note a:hover {
+  color: #8a2084;
+}
+
 /* ── Debug log ── */
 .debug-section {
   border: 1.5px solid #e8b4f5;
