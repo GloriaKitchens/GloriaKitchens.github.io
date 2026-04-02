@@ -20,6 +20,7 @@
   const downloadLink   = document.getElementById('downloadLink');
   const errorSection   = document.getElementById('errorSection');
   const errorMsg       = document.getElementById('errorMsg');
+  const debugLogEl     = document.getElementById('debugLog');
 
   let selectedFile    = null;
   let currentObjectUrl = null;
@@ -77,18 +78,21 @@
     fileNameEl.textContent = file.name;
     convertBtn.disabled = false;
     hideResults();
+    debugLog(`File selected: ${file.name} (${formatBytes(file.size)}, type: ${file.type || 'unknown'})`);
   }
 
   // ── Convert ───────────────────────────────
   convertBtn.addEventListener('click', async () => {
     if (!selectedFile) return;
     hideResults();
+    clearDebugLog();
     convertBtn.disabled = true;
-    showProgress(0, 'Loading PDF…');
+    showProgress(0, 'Reading file…');
 
     try {
       const title    = bookTitleInput.value.trim() || selectedFile.name.replace(/\.pdf$/i, '') || 'My Book';
       const tessLang = langSelect.value;
+      debugLog(`Starting conversion — title: "${title}", language: ${tessLang}`);
 
       // Map Tesseract lang code → BCP 47 tag (used for EPUB metadata & XHTML xml:lang)
       const langMap = {
@@ -97,44 +101,95 @@
       };
       const bcp47 = langMap[tessLang] || tessLang;
 
-      // 1. Load PDF
-      const arrayBuffer = await selectedFile.arrayBuffer();
+      // 1. Read file with progress (0 – 10 %)
+      debugLog('Reading file from disk…');
+      const arrayBuffer = await readFileAsArrayBuffer(selectedFile);
+      debugLog(`File read complete (${formatBytes(arrayBuffer.byteLength)})`);
+
+      // 2. Load PDF
+      showProgress(10, 'Loading PDF…');
+      debugLog('Loading PDF with PDF.js…');
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const totalPages = pdf.numPages;
+      debugLog(`PDF loaded — ${totalPages} page(s) found`);
 
-      // 2. OCR each page
+      // 3. OCR each page (10 – 85 %)
+      debugLog(`Initialising Tesseract OCR (language: ${tessLang})…`);
+      let lastTesseractStatus = null;
       const worker = await Tesseract.createWorker(tessLang, 1, {
-        logger: () => {} // silence verbose logs
+        logger: (m) => {
+          if (m.status && m.status !== lastTesseractStatus) {
+            lastTesseractStatus = m.status;
+            debugLog(`  Tesseract: ${m.status}`);
+          }
+        }
       });
+      debugLog('OCR worker ready');
 
       const pageTexts = [];
       for (let i = 1; i <= totalPages; i++) {
-        const pct = Math.round(((i - 1) / totalPages) * 85);
+        const pct = Math.round(10 + ((i - 1) / totalPages) * 75);
         showProgress(pct, `Recognising page ${i} of ${totalPages}…`);
+        debugLog(`OCR page ${i} / ${totalPages}…`);
+        lastTesseractStatus = null; // reset so status changes log per page
 
         const canvas = await renderPageToCanvas(pdf, i);
         const { data: { text } } = await worker.recognize(canvas);
         pageTexts.push(text.trim());
+        debugLog(`  → page ${i} done (${text.trim().length} characters extracted)`);
       }
 
       await worker.terminate();
+      debugLog('OCR worker terminated');
 
-      // 3. Build EPUB
+      // 4. Build EPUB
       showProgress(90, 'Building EPUB…');
+      debugLog('Building EPUB archive…');
       const epubBlob = await buildEpub(title, pageTexts, bcp47);
+      debugLog(`EPUB built (${formatBytes(epubBlob.size)})`);
 
-      // 4. Offer download – revoke any previous URL to free memory
+      // 5. Offer download – revoke any previous URL to free memory
       showProgress(100, 'Done!');
+      debugLog('✅ Conversion complete!');
       if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
       currentObjectUrl = URL.createObjectURL(epubBlob);
       downloadLink.href = currentObjectUrl;
       downloadLink.download = sanitizeFilename(title) + '.epub';
       showResult();
     } catch (err) {
+      debugLog(`❌ Error: ${err.message || err}`);
       showError('Something went wrong: ' + (err.message || err));
       convertBtn.disabled = false;
     }
   });
+
+  // ── Read file with progress events ────────
+  function readFileAsArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      let lastBarPct = -1;
+      let lastLoggedMilestone = -1;
+      reader.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const filePct  = Math.floor((e.loaded / e.total) * 100);
+          const barPct   = Math.floor((e.loaded / e.total) * 10); // maps read to 0-10% of bar
+          if (barPct !== lastBarPct) {
+            lastBarPct = barPct;
+            showProgress(barPct, `Reading file… ${filePct}%`);
+          }
+          // Log at 25 % intervals, triggering as soon as the threshold is crossed
+          const milestone = Math.floor(filePct / 25) * 25;
+          if (milestone > 0 && milestone > lastLoggedMilestone) {
+            lastLoggedMilestone = milestone;
+            debugLog(`  Reading file: ${milestone}%`);
+          }
+        }
+      };
+      reader.onload  = (e) => resolve(e.target.result);
+      reader.onerror = ()  => reject(new Error('Failed to read file'));
+      reader.readAsArrayBuffer(file);
+    });
+  }
 
   // ── Render a PDF page to an HTMLCanvasElement ──
   async function renderPageToCanvas(pdf, pageNumber) {
@@ -292,6 +347,25 @@ ${body || '<p> </p>'}
 
   function sanitizeFilename(name) {
     return name.replace(/[^a-z0-9_\-. ]/gi, '_').trim() || 'book';
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function debugLog(msg) {
+    const time = new Date().toLocaleTimeString();
+    debugLogEl.value += `[${time}] ${msg}\n`;
+    debugLogEl.scrollTop = debugLogEl.scrollHeight;
+    // Auto-open the details panel when something is logged
+    const details = debugLogEl.closest('details');
+    if (details) details.open = true;
+  }
+
+  function clearDebugLog() {
+    debugLogEl.value = '';
   }
 
   function showProgress(pct, label) {
