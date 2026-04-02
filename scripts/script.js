@@ -30,10 +30,19 @@
 
   // ── File selection ────────────────────────
   fileInput.addEventListener('change', () => {
-    handleFile(fileInput.files[0]);
+    const f = fileInput.files[0];
+    if (f && f.type !== 'application/pdf') {
+      showError('Please select a valid PDF file.');
+      fileInput.value = '';
+      return;
+    }
+    handleFile(f);
   });
 
-  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('click', (e) => {
+    if (e.target.closest('label')) return; // let the label's native for= handle it
+    fileInput.click();
+  });
 
   dropZone.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
