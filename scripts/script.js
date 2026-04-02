@@ -31,7 +31,7 @@
   // ── File selection ────────────────────────
   fileInput.addEventListener('change', () => {
     const f = fileInput.files[0];
-    if (f && f.type !== 'application/pdf') {
+    if (f && !looksLikePdf(f)) {
       showError('Please select a valid PDF file.');
       fileInput.value = '';
       return;
@@ -64,7 +64,7 @@
     e.preventDefault();
     dropZone.classList.remove('drag-over');
     const f = e.dataTransfer.files[0];
-    if (f && f.type === 'application/pdf') {
+    if (f && looksLikePdf(f)) {
       handleFile(f);
     } else {
       showError('Please drop a valid PDF file.');
@@ -273,6 +273,14 @@ ${body || '<p> </p>'}
   }
 
   // ── Helpers ───────────────────────────────
+  function looksLikePdf(file) {
+    // Accept standard and legacy MIME types; fall back to extension check
+    // because some browsers/OS report an empty MIME type for PDFs.
+    return file.type === 'application/pdf' ||
+           file.type === 'application/x-pdf' ||
+           /\.pdf$/i.test(file.name);
+  }
+
   function escapeXml(str) {
     return String(str)
       .replace(/&/g, '&amp;')
