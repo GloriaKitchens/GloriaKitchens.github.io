@@ -21,7 +21,8 @@
   const errorSection   = document.getElementById('errorSection');
   const errorMsg       = document.getElementById('errorMsg');
 
-  let selectedFile = null;
+  let selectedFile    = null;
+  let currentObjectUrl = null;
 
   // ── PDF.js worker ─────────────────────────
   pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -33,6 +34,13 @@
   });
 
   dropZone.addEventListener('click', () => fileInput.click());
+
+  dropZone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
 
   dropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -70,8 +78,15 @@
     showProgress(0, 'Loading PDF…');
 
     try {
-      const title = bookTitleInput.value.trim() || selectedFile.name.replace(/\.pdf$/i, '') || 'My Book';
-      const lang  = langSelect.value;
+      const title    = bookTitleInput.value.trim() || selectedFile.name.replace(/\.pdf$/i, '') || 'My Book';
+      const tessLang = langSelect.value;
+
+      // Map Tesseract lang code → BCP 47 tag (used for EPUB metadata & XHTML xml:lang)
+      const langMap = {
+        eng: 'en', fra: 'fr', deu: 'de', spa: 'es', ita: 'it',
+        por: 'pt', rus: 'ru', chi_sim: 'zh-Hans', jpn: 'ja', ara: 'ar'
+      };
+      const bcp47 = langMap[tessLang] || tessLang;
 
       // 1. Load PDF
       const arrayBuffer = await selectedFile.arrayBuffer();
@@ -79,7 +94,7 @@
       const totalPages = pdf.numPages;
 
       // 2. OCR each page
-      const worker = await Tesseract.createWorker(lang, 1, {
+      const worker = await Tesseract.createWorker(tessLang, 1, {
         logger: () => {} // silence verbose logs
       });
 
@@ -97,12 +112,13 @@
 
       // 3. Build EPUB
       showProgress(90, 'Building EPUB…');
-      const epubBlob = buildEpub(title, pageTexts);
+      const epubBlob = await buildEpub(title, pageTexts, bcp47);
 
-      // 4. Offer download
+      // 4. Offer download – revoke any previous URL to free memory
       showProgress(100, 'Done!');
-      const url = URL.createObjectURL(epubBlob);
-      downloadLink.href = url;
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = URL.createObjectURL(epubBlob);
+      downloadLink.href = currentObjectUrl;
       downloadLink.download = sanitizeFilename(title) + '.epub';
       showResult();
     } catch (err) {
@@ -124,15 +140,9 @@
   }
 
   // ── Build a minimal valid EPUB 3 ─────────────
-  function buildEpub(title, pageTexts) {
+  function buildEpub(title, pageTexts, lang) {
     const zip  = new JSZip();
     const id   = 'book-' + Date.now();
-    // Map Tesseract lang codes to BCP 47 tags required by the EPUB spec
-    const langMap = {
-      eng: 'en', fra: 'fr', deu: 'de', spa: 'es', ita: 'it',
-      por: 'pt', rus: 'ru', chi_sim: 'zh-Hans', jpn: 'ja', ara: 'ar'
-    };
-    const lang = langMap[langSelect.value] || langSelect.value;
 
     // mimetype (must be first and uncompressed)
     zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
@@ -152,7 +162,7 @@
     // One XHTML chapter per page
     const spineItems = pageTexts.map((text, i) => {
       const fname = `page${i + 1}.xhtml`;
-      oebps.file(fname, makeXhtml(title, i + 1, text));
+      oebps.file(fname, makeXhtml(title, i + 1, text, lang));
       return fname;
     });
 
@@ -163,12 +173,12 @@
     oebps.file('toc.ncx', makeNcx(id, title, spineItems));
 
     // nav.xhtml  (EPUB 3 nav document)
-    oebps.file('nav.xhtml', makeNav(title, spineItems));
+    oebps.file('nav.xhtml', makeNav(title, spineItems, lang));
 
     return zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
   }
 
-  function makeXhtml(title, pageNum, text) {
+  function makeXhtml(title, pageNum, text, lang) {
     const escaped = escapeXml(text);
     // Preserve paragraph structure: blank lines become spacer paragraphs
     const body = escaped.split('\n').map(l => l.trim()
@@ -177,7 +187,7 @@
     ).join('\n');
     return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="${escapeXml(lang)}" lang="${escapeXml(lang)}">
 <head><meta charset="utf-8"/><title>${escapeXml(title)} — Page ${pageNum}</title></head>
 <body>
 <h2>Page ${pageNum}</h2>
@@ -234,13 +244,13 @@ ${body || '<p> </p>'}
 </ncx>`;
   }
 
-  function makeNav(title, spineItems) {
+  function makeNav(title, spineItems, lang) {
     const items = spineItems.map((f, i) =>
       `<li><a href="${f}">Page ${i + 1}</a></li>`
     ).join('\n      ');
     return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="en">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${escapeXml(lang)}" lang="${escapeXml(lang)}">
 <head><meta charset="utf-8"/><title>Table of Contents</title></head>
 <body>
   <nav epub:type="toc">

@@ -70,6 +70,11 @@ h1 {
   border-color: #c040b8;
 }
 
+.drop-zone:focus-visible {
+  outline: 3px solid #c040b8;
+  outline-offset: 3px;
+}
+
 .upload-icon {
   width: 48px;
   height: 48px;
@@ -136,6 +141,12 @@ h1 {
   border-color: #c040b8;
 }
 
+.text-input:focus-visible,
+.select:focus-visible {
+  outline: 3px solid #c040b8;
+  outline-offset: 2px;
+}
+
 /* ── Buttons ── */
 .button {
   display: inline-block;
@@ -163,6 +174,11 @@ h1 {
 .button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.button:focus-visible {
+  outline: 3px solid #c040b8;
+  outline-offset: 3px;
 }
 
 .button-convert {
