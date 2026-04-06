@@ -7,6 +7,9 @@ the resulting EPUB when the server-side job completes.
 
 Run locally with:
     python -m uvicorn app:app --host 127.0.0.1 --port 8000
+
+Render deployment:
+    Uses render.yaml + Dockerfile so Tesseract is installed in the container.
 """
 
 from __future__ import annotations

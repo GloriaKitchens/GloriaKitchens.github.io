@@ -10,3 +10,6 @@ __pycache__/
 # OS artifacts
 .DS_Store
 Thumbs.db
+
+# Docker / local container output
+.docker/

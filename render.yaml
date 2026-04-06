@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: pdf-to-epub-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PDF_TO_EPUB_CORS_ORIGINS
+        value: https://gloriakitchens.github.io
+      - key: PDF_TO_EPUB_MAX_UPLOAD_MB
+        value: "100"
+      - key: PDF_TO_EPUB_JOB_TTL_SECONDS
+        value: "3600"

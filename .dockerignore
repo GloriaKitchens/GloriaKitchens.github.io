@@ -1,0 +1,13 @@
+.git
+.github
+__pycache__
+.pytest_cache
+ScannedPDFs
+*.epub
+*.pyc
+*.pyo
+pub815_formatted_v2.epub
+pub815_formatted_v3.epub
+pub815_formatted_v4.epub
+radiological_formatted.epub
+download_corpus.py

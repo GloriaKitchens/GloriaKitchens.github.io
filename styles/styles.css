@@ -149,6 +149,7 @@ a:hover {
 
 .panel-text,
 .section-text,
+.backend-note,
 .footer-copy,
 .content-block p,
 .faq-item p,
@@ -195,6 +196,19 @@ a:hover {
   flex-direction: column;
   gap: 10px;
   margin-bottom: 22px;
+}
+
+.backend-note {
+  border: 1px solid #f0d9f7;
+  border-radius: 14px;
+  background: #fff7fd;
+  padding: 12px 14px;
+  font-size: 0.94rem;
+}
+
+.backend-note code {
+  color: #7f2078;
+  font-family: 'Courier New', Courier, monospace;
 }
 
 .content-section .eyebrow,

@@ -19,6 +19,9 @@
   const debugLogEl = document.getElementById('debugLog');
 
   const API_BASE = (document.body && document.body.dataset.apiBase) || '';
+  const NEEDS_EXPLICIT_API_BASE =
+    /\.github\.io$/i.test(window.location.hostname) ||
+    window.location.protocol === 'file:';
 
   let selectedFile = null;
   let currentJobId = null;
@@ -68,6 +71,13 @@
 
   convertBtn.addEventListener('click', async () => {
     if (!selectedFile) return;
+    if (!backendConfigured()) {
+      const message =
+        'No Python API backend is configured for this site. On GitHub Pages, set body[data-api-base] to your deployed backend URL.';
+      debugLog(message);
+      showError(message);
+      return;
+    }
 
     stopPolling();
     currentJobId = null;
@@ -156,6 +166,11 @@
   function apiUrl(path) {
     if (!API_BASE) return path;
     return API_BASE.replace(/\/$/, '') + path;
+  }
+
+  function backendConfigured() {
+    if (API_BASE) return true;
+    return !NEEDS_EXPLICIT_API_BASE;
   }
 
   function syncLogs(lines) {

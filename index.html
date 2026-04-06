@@ -67,6 +67,12 @@
             Upload a PDF, choose an OCR language, and let the server run the Python pipeline
             behind the scenes. This keeps the better conversion quality while preserving a simple browser flow.
           </p>
+          <p class="backend-note">
+            <strong>Setup note:</strong> GitHub Pages cannot run the Python API. If this frontend is
+            hosted on <code>github.io</code>, set the <code>data-api-base</code> attribute on
+            <code>&lt;body&gt;</code> to your deployed backend URL, such as
+            <code>https://pdf-to-epub-api.onrender.com</code>.
+          </p>
         </div>
 
         <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Drop zone: drag and drop a PDF here, or press Enter to choose a file">
