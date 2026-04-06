@@ -224,8 +224,9 @@ def _classify_heading(text: str) -> str | None:
     # 4. Two or more "Initial.(number)" patterns → table / exposure data row
     if len(_TABLE_RE.findall(t)) >= 2:
         return None
-    # 5. Starts with a bare number + space (not "3.1 SECTION") → map label / noise
-    if re.match(r'^\d+\s', t) and not re.match(r'^\d+\.\d', t):
+    # 5. Starts with a digit that isn't a decimal section number (3.1, 42.) →
+    #    map label, OCR noise, or reversed-text garbage (e.g. "3ANIAV YASSVN")
+    if re.match(r'^\d', t) and not re.match(r'^\d+\.', t):
         return None
     # 6. Technical drawing/report reference code → ORNL figure label, ISBN, date-codes
     if _TECH_REF_RE.search(t):

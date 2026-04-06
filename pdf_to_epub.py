@@ -740,6 +740,7 @@ def main() -> None:
             '  python pdf_to_epub.py scan.pdf --title "My Book" --lang fra\n'
             '  python pdf_to_epub.py scan.pdf --output book.epub --lang deu --scale 3.0\n'
             '  python pdf_to_epub.py scan.pdf --no-images\n'
+            '  python pdf_to_epub.py scan.pdf --format\n'
             '\n'
             'supported --lang values:\n'
             '  eng  English (default)   fra  French       deu  German\n'
@@ -778,6 +779,11 @@ def main() -> None:
             f'(pages with fewer than {_FIGURE_WORD_THRESHOLD} OCR words); '
             f'produces a smaller EPUB but loses visual content'
         ),
+    )
+    parser.add_argument(
+        '--format',
+        action='store_true',
+        help='run format_epub.py on the output after conversion (adds TOC and reformats headings)',
     )
     args = parser.parse_args()
 
@@ -857,6 +863,30 @@ def main() -> None:
     build_epub(output_path, title, page_data, bcp47)
     size_kb = output_path.stat().st_size / 1024
     print(f'Done! Saved to: {output_path} ({size_kb:.1f} KB)')
+
+    # ── Optional: format EPUB (TOC + heading cleanup) ─────────────────────────
+    if args.format:
+        import importlib.util
+        import shutil
+        import tempfile
+        fmt_script = Path(__file__).parent / 'format_epub.py'
+        if not fmt_script.exists():
+            print('Warning: format_epub.py not found beside pdf_to_epub.py — skipping.', file=sys.stderr)
+        else:
+            print('Formatting EPUB…')
+            spec = importlib.util.spec_from_file_location('format_epub', fmt_script)
+            fmt_mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(fmt_mod)
+            # format_epub reads and writes; use a temp file to avoid in-place conflict
+            with tempfile.NamedTemporaryFile(suffix='.epub', delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+            shutil.move(str(output_path), str(tmp_path))
+            try:
+                fmt_mod.format_epub(tmp_path, output_path)
+                size_kb = output_path.stat().st_size / 1024
+                print(f'Formatted! Saved to: {output_path} ({size_kb:.1f} KB)')
+            finally:
+                tmp_path.unlink(missing_ok=True)
 
 
 if __name__ == '__main__':
