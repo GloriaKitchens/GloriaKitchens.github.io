@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy | PDF to EPUB</title>
+  <meta name="description" content="Privacy details for the PDF to EPUB site, including browser-side processing, downloadable scripts, and future advertising considerations.">
+  <link rel="canonical" href="https://gloriakitchens.github.io/privacy.html">
+  <link rel="stylesheet" href="styles/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;800&family=Boldonse&display=swap" rel="stylesheet">
+</head>
+<body class="article-page">
+  <div class="page-wrapper">
+    <header class="site-header">
+      <div class="site-shell">
+        <nav class="top-nav" aria-label="Primary">
+          <a class="brand-link" href="index.html">PDF to EPUB</a>
+          <div class="nav-links">
+            <a href="index.html">Home</a>
+            <a href="guides/index.html">Guides</a>
+            <a href="about.html">About</a>
+            <a href="privacy.html">Privacy</a>
+          </div>
+        </nav>
+        <section class="hero article-hero">
+          <div class="hero-copy">
+            <p class="eyebrow">Privacy policy</p>
+            <h1>How files and site data are handled</h1>
+            <p class="hero-text">
+              This page explains the hosted browser workflow, downloadable scripts, and the site
+              policies needed for a trustworthy utility website.
+            </p>
+          </div>
+        </section>
+      </div>
+    </header>
+
+    <main class="site-main site-shell">
+      <div class="article-layout">
+        <article class="card article-content">
+          <p class="breadcrumb"><a href="index.html">Home</a> / Privacy</p>
+          <h2>Hosted conversion processing</h2>
+          <p>
+            The browser tool uploads PDFs to a Python backend so the server can run the same
+            `pdf_to_epub.py` and `format_epub.py` pipeline used in the downloadable workflow.
+          </p>
+          <p>
+            Uploaded files should be treated as temporary processing inputs. Production deployment
+            should include clear retention limits, cleanup rules, and host-level security controls.
+          </p>
+
+          <h2>Downloadable scripts</h2>
+          <p>
+            If you use the Python scripts, processing happens on your own machine in your local
+            environment. The site provides the files and instructions, but the conversion itself
+            runs where you execute the script.
+          </p>
+
+          <h2>Third-party libraries</h2>
+          <p>
+            The hosted site may use frontend libraries for UI behavior and a Python backend for
+            conversion work. Deployment should document any production libraries, infrastructure,
+            or third-party services actually used.
+          </p>
+
+          <h2>Advertising and analytics</h2>
+          <p>
+            This site may add advertising or analytics in the future. If that happens, this page
+            should be updated to describe the providers used, the categories of data involved, and
+            any choices available to visitors.
+          </p>
+
+          <h2>Content and external links</h2>
+          <p>
+            Guides on the site may link to external tools, references, or documentation. External
+            sites have their own privacy practices and should be reviewed separately.
+          </p>
+
+          <h2>Updates</h2>
+          <p>
+            As the site grows, this policy should be revised to match the actual production setup,
+            especially before enabling AdSense, analytics, newsletter forms, or other user-facing integrations.
+          </p>
+        </article>
+
+        <aside class="article-sidebar">
+          <div class="article-sidebar-card">
+            <h3>Quick privacy summary</h3>
+            <ul class="support-list">
+              <li>Browser uploads are processed by a Python backend</li>
+              <li>Python scripts can still run locally if downloaded</li>
+              <li>Future ads or analytics should be disclosed here</li>
+            </ul>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-shell footer-inner">
+        <div>
+          <h2 class="footer-title">PDF to EPUB</h2>
+          <p class="footer-copy">A tool-first site with OCR, ebook, and scanning guidance.</p>
+        </div>
+        <div class="footer-links">
+          <a href="index.html">Home</a>
+          <a href="guides/index.html">Guides</a>
+          <a href="about.html">About</a>
+          <a href="privacy.html">Privacy</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

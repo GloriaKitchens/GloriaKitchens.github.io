@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://gloriakitchens.github.io/sitemap.xml

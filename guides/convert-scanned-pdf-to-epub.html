@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How to Convert Scanned PDFs Into EPUB Files</title>
+  <meta name="description" content="Learn how to turn a scanned PDF into a readable EPUB using a browser converter or the higher-quality Python workflow.">
+  <link rel="canonical" href="https://gloriakitchens.github.io/guides/convert-scanned-pdf-to-epub.html">
+  <link rel="stylesheet" href="../styles/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;800&family=Boldonse&display=swap" rel="stylesheet">
+</head>
+<body class="article-page">
+  <div class="page-wrapper">
+    <header class="site-header">
+      <div class="site-shell">
+        <nav class="top-nav" aria-label="Primary">
+          <a class="brand-link" href="../index.html">PDF to EPUB</a>
+          <div class="nav-links">
+            <a href="../index.html">Home</a>
+            <a href="index.html">Guides</a>
+            <a href="../about.html">About</a>
+            <a href="../privacy.html">Privacy</a>
+          </div>
+        </nav>
+        <section class="hero article-hero">
+          <div class="hero-copy">
+            <p class="eyebrow">Conversion guide</p>
+            <h1>How to convert scanned PDFs into EPUB files</h1>
+            <p class="hero-text">
+              Scanned PDFs are often hard to read on smaller screens. Converting them to EPUB can
+              make the text more flexible, searchable, and easier to navigate.
+            </p>
+          </div>
+        </section>
+      </div>
+    </header>
+
+    <main class="site-main site-shell">
+      <div class="article-layout">
+        <article class="card article-content">
+          <p class="breadcrumb"><a href="../index.html">Home</a> / <a href="index.html">Guides</a> / Convert Scanned PDFs Into EPUB Files</p>
+          <p>
+            A scanned PDF is usually just a stack of page images. That makes it awkward for small
+            screens and impossible to reflow like a normal ebook. The goal of conversion is to
+            recognize the text, organize it into reading-friendly markup, and package it as EPUB.
+          </p>
+
+          <h2>Choose the right path first</h2>
+          <p>
+            If you want a quick hosted workflow, the browser converter on the homepage is the fastest
+            option. It uploads the document to a Python backend and returns the final EPUB when the
+            job finishes. If you want to run everything on your own machine, the downloadable Python
+            workflow is the better choice.
+          </p>
+
+          <h2>Use the browser converter for quick experiments</h2>
+          <p>
+            The browser tool is best when you want the better Python output without using the
+            command line. Choose the PDF, set the OCR language, and wait for the server-side job to finish.
+          </p>
+
+          <h2>Use the Python workflow for better formatting</h2>
+          <p>
+            The recommended command-line workflow is:
+          </p>
+          <pre class="python-code">python pdf_to_epub.py scan.pdf --format</pre>
+          <p>
+            That one command handles conversion and post-formatting in sequence. It is especially
+            useful when the source PDF mixes scanned pages, embedded text layers, figures, and section headings.
+          </p>
+
+          <h2>Why EPUB usually reads better than PDF</h2>
+          <p>
+            EPUB can reflow text, increase font size cleanly, and adjust to phones or e-readers.
+            That makes it a better reading format for narrative documents, long reports, and course
+            material. PDF still matters when preserving fixed layout is the top priority, but it is
+            rarely the most comfortable format for extended reading.
+          </p>
+
+          <h2>What makes conversion quality better</h2>
+          <ul>
+            <li>Sharper source scans</li>
+            <li>Correct OCR language selection</li>
+            <li>Reasonable page contrast</li>
+            <li>Fewer skewed or clipped pages</li>
+            <li>Post-formatting that cleans up headings and paragraphs</li>
+          </ul>
+
+          <h2>Common problems to expect</h2>
+          <p>
+            Old scans can produce OCR mistakes, broken paragraph flow, or figures that need to stay
+            as images. That is why the stronger Python workflow matters: it can preserve more useful
+            structure and reduce the amount of manual cleanup later.
+          </p>
+
+          <blockquote>
+            Best practice: test a few representative pages first. If the first sample looks good,
+            the full document is much more likely to convert cleanly.
+          </blockquote>
+        </article>
+
+        <aside class="article-sidebar">
+          <div class="article-sidebar-card">
+            <h3>Try it now</h3>
+            <ul class="support-list">
+              <li><a href="../index.html#tool">Open the browser converter</a></li>
+              <li><a href="../pdf_to_epub.py">Download the Python script</a></li>
+              <li><a href="../format_epub.py">Download the formatter</a></li>
+            </ul>
+          </div>
+          <div class="article-sidebar-card">
+            <h3>Related reading</h3>
+            <ul class="support-list">
+              <li><a href="fix-blurry-scanned-pdfs.html">How to Fix Blurry Scanned PDFs Before Converting</a></li>
+              <li><a href="epub-vs-pdf-for-reading.html">EPUB vs PDF: Which Is Better for Reading?</a></li>
+            </ul>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-shell footer-inner">
+        <div>
+          <h2 class="footer-title">PDF to EPUB</h2>
+          <p class="footer-copy">Tool, scripts, and guides for better reading workflows.</p>
+        </div>
+        <div class="footer-links">
+          <a href="../index.html">Home</a>
+          <a href="index.html">Guides</a>
+          <a href="../about.html">About</a>
+          <a href="../privacy.html">Privacy</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

@@ -3,229 +3,303 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scanned PDF to Text EPUB</title>
+  <title>PDF to EPUB Converter | OCR Tool, Guides, and EPUB Workflow</title>
+  <meta name="description" content="Convert scanned PDFs into readable EPUB files in your browser, then explore OCR and ebook guides designed to help readers, students, and archivists.">
+  <link rel="canonical" href="https://gloriakitchens.github.io/">
   <link rel="stylesheet" href="styles/styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;800&family=Boldonse&display=swap" rel="stylesheet">
 </head>
-<body>
+<body data-api-base="">
   <div class="page-wrapper">
+    <header class="site-header">
+      <div class="site-shell">
+        <nav class="top-nav" aria-label="Primary">
+          <a class="brand-link" href="index.html">PDF to EPUB</a>
+          <div class="nav-links">
+            <a href="#tool">Tool</a>
+            <a href="guides/index.html">Guides</a>
+            <a href="about.html">About</a>
+            <a href="privacy.html">Privacy</a>
+          </div>
+        </nav>
 
-    <header class="center">
-      <h1>PDF → EPUB</h1>
-      <p class="subtitle">Convert PDFs to readable EPUBs with browser tools or the command-line pipeline</p>
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">Tool-first homepage</p>
+            <h1>Convert scanned PDFs into readable EPUBs</h1>
+            <p class="hero-text">
+              Upload a PDF through the browser, let the server run the higher-quality
+              Python conversion pipeline, and download a cleaner EPUB when the job finishes.
+            </p>
+            <div class="hero-actions">
+              <a class="button" href="#tool">Open the converter</a>
+              <a class="button button-secondary" href="guides/index.html">Read the guides</a>
+            </div>
+            <ul class="trust-list">
+              <li>Browser UI now uses the Python conversion scripts on the backend</li>
+              <li>The same pipeline handles native text, OCR fallback, and formatting</li>
+              <li>Guides answer common EPUB, OCR, and scanning questions</li>
+            </ul>
+          </div>
+
+          <aside class="hero-panel card">
+            <h2 class="panel-title">Why this site can grow well with content</h2>
+            <p class="panel-text">
+              The converter is the main utility, while the guide library captures
+              informational search traffic and links readers back to the tool.
+            </p>
+            <div class="ad-slot" aria-label="Sponsored content placeholder">
+              <p>Sponsored placement area reserved for future AdSense integration.</p>
+            </div>
+          </aside>
+        </section>
+      </div>
     </header>
 
-    <main class="card">
-      <!-- File drop zone -->
-      <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Drop zone: drag and drop a PDF here, or press Enter to choose a file">
-        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <polyline points="16 16 12 12 8 16"></polyline>
-          <line x1="12" y1="12" x2="12" y2="21"></line>
-          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
-        </svg>
-        <p class="drop-label">Drag &amp; drop a PDF here</p>
-        <p class="drop-or">— or —</p>
-        <label class="button" for="fileInput">Choose PDF</label>
-        <input type="file" id="fileInput" accept=".pdf,application/pdf" hidden>
-        <p class="file-name" id="fileName"></p>
-      </div>
-
-      <!-- Options -->
-      <div class="options-row">
-        <div class="option-group">
-          <label for="bookTitle" class="option-label">Book title</label>
-          <input type="text" id="bookTitle" class="text-input" placeholder="My Book" maxlength="100">
+    <main class="site-main site-shell">
+      <section class="card tool-card" id="tool">
+        <div class="section-intro">
+          <p class="eyebrow">Free browser converter</p>
+          <h2 class="section-heading">Convert a PDF without leaving the page</h2>
+          <p class="section-text">
+            Upload a PDF, choose an OCR language, and let the server run the Python pipeline
+            behind the scenes. This keeps the better conversion quality while preserving a simple browser flow.
+          </p>
         </div>
-        <div class="option-group">
-          <label for="langSelect" class="option-label">OCR language</label>
-          <select id="langSelect" class="select">
-            <option value="eng">English</option>
-            <option value="fra">French</option>
-            <option value="deu">German</option>
-            <option value="spa">Spanish</option>
-            <option value="ita">Italian</option>
-            <option value="por">Portuguese</option>
-            <option value="rus">Russian</option>
-            <option value="chi_sim">Chinese (Simplified)</option>
-            <option value="jpn">Japanese</option>
-            <option value="ara">Arabic</option>
-          </select>
+
+        <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Drop zone: drag and drop a PDF here, or press Enter to choose a file">
+          <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <polyline points="16 16 12 12 8 16"></polyline>
+            <line x1="12" y1="12" x2="12" y2="21"></line>
+            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+          </svg>
+          <p class="drop-label">Drag and drop a PDF here</p>
+          <p class="drop-or">or</p>
+          <label class="button" for="fileInput">Choose PDF</label>
+          <input type="file" id="fileInput" accept=".pdf,application/pdf" hidden>
+          <p class="file-name" id="fileName"></p>
         </div>
-      </div>
 
-      <!-- Convert button -->
-      <button class="button button-convert" id="convertBtn" disabled>Convert to EPUB</button>
-
-      <!-- Progress -->
-      <div class="progress-section" id="progressSection" hidden>
-        <div class="progress-bar-track">
-          <div class="progress-bar-fill" id="progressFill"></div>
+        <div class="options-row">
+          <div class="option-group">
+            <label for="bookTitle" class="option-label">Book title</label>
+            <input type="text" id="bookTitle" class="text-input" placeholder="My Book" maxlength="100">
+          </div>
+          <div class="option-group">
+            <label for="langSelect" class="option-label">OCR language</label>
+            <select id="langSelect" class="select">
+              <option value="eng">English</option>
+              <option value="fra">French</option>
+              <option value="deu">German</option>
+              <option value="spa">Spanish</option>
+              <option value="ita">Italian</option>
+              <option value="por">Portuguese</option>
+              <option value="rus">Russian</option>
+              <option value="chi_sim">Chinese (Simplified)</option>
+              <option value="jpn">Japanese</option>
+              <option value="ara">Arabic</option>
+            </select>
+          </div>
         </div>
-        <p class="progress-label" id="progressLabel">Starting…</p>
-      </div>
 
-      <!-- Result -->
-      <div class="result-section" id="resultSection" hidden>
-        <p class="result-msg">✅ Conversion complete!</p>
-        <a class="button button-download" id="downloadLink" download="book.epub">Download EPUB</a>
-      </div>
+        <button class="button button-convert" id="convertBtn" disabled>Convert to EPUB</button>
 
-      <!-- Error -->
-      <div class="error-section" id="errorSection" hidden aria-live="assertive" aria-atomic="true">
-        <p class="error-msg" id="errorMsg"></p>
-      </div>
-
-      <!-- Debug log -->
-      <details class="debug-section" id="debugSection">
-        <summary class="debug-summary">Debug log</summary>
-        <div role="log" aria-live="polite" aria-relevant="additions">
-          <textarea class="debug-log" id="debugLog" readonly aria-label="Debug output"></textarea>
+        <div class="progress-section" id="progressSection" hidden>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progressFill"></div>
+          </div>
+          <p class="progress-label" id="progressLabel">Starting...</p>
         </div>
-      </details>
+
+        <div class="result-section" id="resultSection" hidden>
+          <p class="result-msg">Conversion complete.</p>
+          <a class="button button-download" id="downloadLink" download="book.epub">Download EPUB</a>
+        </div>
+
+        <div class="error-section" id="errorSection" hidden aria-live="assertive" aria-atomic="true">
+          <p class="error-msg" id="errorMsg"></p>
+        </div>
+
+        <details class="debug-section" id="debugSection">
+          <summary class="debug-summary">Debug log</summary>
+          <div role="log" aria-live="polite" aria-relevant="additions">
+            <textarea class="debug-log" id="debugLog" readonly aria-label="Debug output"></textarea>
+          </div>
+        </details>
+      </section>
+
+      <section class="card content-section">
+        <div class="section-intro">
+          <p class="eyebrow">Recommended workflow</p>
+          <h2 class="section-heading">Use the one-step command-line pipeline for best results</h2>
+          <p class="section-text">
+            The same Python workflow powers both the hosted converter and the standalone script.
+            It is the best fit for large files, mixed digital/scanned PDFs, and cleaner output.
+          </p>
+        </div>
+
+        <div class="two-column">
+          <div class="content-block">
+            <h3 class="mini-heading">Recommended command</h3>
+            <pre class="python-code">python pdf_to_epub.py scan.pdf --format</pre>
+            <p class="python-lang-note">
+              This produces the EPUB and then runs the formatter so headings, table-of-contents
+              entries, and paragraph structure are cleaned up in one pass.
+            </p>
+          </div>
+
+          <div class="content-block">
+            <h3 class="mini-heading">Useful options</h3>
+            <pre class="python-code">python pdf_to_epub.py scan.pdf --lang fra
+python pdf_to_epub.py scan.pdf --scale 3.0
+python pdf_to_epub.py scan.pdf --no-images</pre>
+          </div>
+        </div>
+
+        <div class="inline-links">
+          <a href="pdf_to_epub.py">Download pdf_to_epub.py</a>
+          <a href="format_epub.py">Download format_epub.py</a>
+          <a href="guides/convert-scanned-pdf-to-epub.html">Read the full walkthrough</a>
+        </div>
+      </section>
+
+      <section class="card content-section">
+        <div class="section-intro">
+          <p class="eyebrow">How it works</p>
+          <h2 class="section-heading">Built for readers, students, and archive cleanup</h2>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>1. Upload or render the PDF</h3>
+            <p>The site uploads the PDF to the backend so the server can run the Python conversion scripts.</p>
+          </article>
+          <article class="feature-card">
+            <h3>2. Extract text with OCR</h3>
+            <p>The backend calls the Python pipeline, which handles native text, OCR fallback, and figure-aware EPUB output.</p>
+          </article>
+          <article class="feature-card">
+            <h3>3. Build a simple EPUB</h3>
+            <p>The service returns a downloadable EPUB after conversion and post-processing are complete.</p>
+          </article>
+          <article class="feature-card">
+            <h3>4. Keep the same workflow offline</h3>
+            <p>For self-hosting or local processing, you can still download and run the Python scripts directly.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="card content-section">
+        <div class="section-intro">
+          <p class="eyebrow">Featured guides</p>
+          <h2 class="section-heading">Content that supports the tool and captures search traffic</h2>
+          <p class="section-text">
+            These evergreen guides answer the questions people ask before and after they use a converter.
+          </p>
+        </div>
+
+        <div class="guide-grid">
+          <a class="guide-card" href="guides/convert-scanned-pdf-to-epub.html">
+            <p class="guide-meta">Converter guide</p>
+            <h3>How to Convert Scanned PDFs Into EPUB Files</h3>
+            <p>Learn the fast browser path, the higher-quality Python path, and when to use each.</p>
+          </a>
+          <a class="guide-card" href="guides/best-free-ocr-tools-for-students.html">
+            <p class="guide-meta">OCR roundup</p>
+            <h3>Best Free OCR Tools for Students</h3>
+            <p>Compare simple OCR options for notes, handouts, research scans, and reading prep.</p>
+          </a>
+          <a class="guide-card" href="guides/turn-physical-books-into-ebooks.html">
+            <p class="guide-meta">Digitization guide</p>
+            <h3>How to Turn Physical Books Into eBooks</h3>
+            <p>Scan carefully, improve image quality, and convert pages into something easier to read.</p>
+          </a>
+          <a class="guide-card" href="guides/epub-vs-pdf-for-reading.html">
+            <p class="guide-meta">Format comparison</p>
+            <h3>EPUB vs PDF: Which Is Better for Reading?</h3>
+            <p>See why EPUB is often easier on mobile and e-readers, while PDF is still useful for layout fidelity.</p>
+          </a>
+          <a class="guide-card" href="guides/fix-blurry-scanned-pdfs.html">
+            <p class="guide-meta">Scan quality</p>
+            <h3>How to Fix Blurry Scanned PDFs Before Converting</h3>
+            <p>Improve legibility first so OCR output and final EPUB quality are much better.</p>
+          </a>
+          <a class="guide-card" href="guides/index.html">
+            <p class="guide-meta">Library</p>
+            <h3>Browse all guides</h3>
+            <p>Use the guide hub as a starting point for OCR, EPUB, and scanning workflows.</p>
+          </a>
+        </div>
+      </section>
+
+      <section class="card content-section">
+        <div class="section-intro">
+          <p class="eyebrow">Related tools roadmap</p>
+          <h2 class="section-heading">Future tools that fit the same audience</h2>
+          <p class="section-text">
+            These are planned categories for future expansion. They create clear internal-link targets
+            without distracting from the current converter.
+          </p>
+        </div>
+
+        <div class="future-tools-grid">
+          <div class="future-tool-card"><h3>PDF to MOBI</h3><p>For Kindle-friendly ebook workflows.</p></div>
+          <div class="future-tool-card"><h3>PDF to TXT</h3><p>For note-taking, research, and archival cleanup.</p></div>
+          <div class="future-tool-card"><h3>OCR Text Extractor</h3><p>For users who only need editable text output.</p></div>
+          <div class="future-tool-card"><h3>EPUB to PDF</h3><p>For people who need printable or shareable layouts.</p></div>
+          <div class="future-tool-card"><h3>Compress PDF</h3><p>For smaller uploads and cleaner document storage.</p></div>
+          <div class="future-tool-card"><h3>Merge PDF</h3><p>For combining scan batches before conversion.</p></div>
+        </div>
+      </section>
+
+      <section class="card content-section">
+        <div class="section-intro">
+          <p class="eyebrow">FAQ</p>
+          <h2 class="section-heading">Common questions before people convert</h2>
+        </div>
+
+        <div class="faq-grid">
+          <article class="faq-item">
+            <h3>Is EPUB better than PDF for reading?</h3>
+            <p>Usually yes on phones and e-readers because EPUB reflows text, scales fonts, and adapts to smaller screens.</p>
+          </article>
+          <article class="faq-item">
+            <h3>Does the browser tool upload my files?</h3>
+            <p>Yes. The browser UI uploads the PDF to a Python backend so the server can run the higher-quality conversion pipeline.</p>
+          </article>
+          <article class="faq-item">
+            <h3>When should I use the Python scripts instead?</h3>
+            <p>Use them for large PDFs, mixed scanned/digital documents, better figure handling, and the one-step <code>--format</code> workflow.</p>
+          </article>
+          <article class="faq-item">
+            <h3>Can I use this for class handouts and scanned notes?</h3>
+            <p>Yes. That is one of the best use cases, especially when you want searchable text or easier mobile reading.</p>
+          </article>
+        </div>
+      </section>
     </main>
 
-    <!-- Python script download card -->
-    <section class="card python-card" aria-labelledby="pyScriptHeading">
-      <h2 id="pyScriptHeading" class="python-card-title">🐍 Python Script</h2>
-      <p class="python-card-desc">
-        Prefer to work offline or process large files on the command line?
-        Download the standalone Python script — it handles native text layers,
-        OCR fallback, inline figure extraction, and optional post-formatting on
-        your own machine.
-      </p>
-
-      <a class="button button-download" href="pdf_to_epub.py" download="pdf_to_epub.py">
-        Download pdf_to_epub.py
-      </a>
-
-      <div class="python-steps">
-        <h3 class="python-steps-title">How to use it</h3>
-
-        <ol class="python-steps-list">
-          <li>
-            <strong>Install Python 3.8+</strong> from
-            <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">python.org</a>
-            if you don't have it yet.
-          </li>
-          <li>
-            <strong>Install Tesseract OCR</strong> on your system:
-            <ul class="python-sub-list">
-              <li><em>macOS:</em> <code>brew install tesseract</code></li>
-              <li><em>Ubuntu / Debian:</em> <code>sudo apt install tesseract-ocr</code></li>
-              <li>
-                <em>Windows:</em> download the installer from
-                <a href="https://github.com/UB-Mannheim/tesseract/wiki" target="_blank" rel="noopener">UB-Mannheim/tesseract</a>
-              </li>
-            </ul>
-          </li>
-          <li>
-            <strong>Install Python dependencies</strong> in a terminal:
-            <pre class="python-code">pip install pymupdf pytesseract Pillow</pre>
-          </li>
-          <li>
-            <strong>Run the recommended one-step workflow</strong>:
-            <pre class="python-code">python pdf_to_epub.py scan.pdf --format</pre>
-            The EPUB is saved next to the PDF with the same base name and then
-            cleaned up with table-of-contents + heading formatting.
-          </li>
-        </ol>
-
-        <h3 class="python-steps-title">Common usage patterns</h3>
-        <pre class="python-code"># Recommended: convert and format in one pass
-python pdf_to_epub.py scan.pdf --format
-
-# Set a custom title and output path
-python pdf_to_epub.py scan.pdf --title "My Novel" --output my_novel.epub
-
-# OCR a French document
-python pdf_to_epub.py scan.pdf --lang fra
-
-# Increase render scale for better accuracy (slower)
-python pdf_to_epub.py scan.pdf --scale 3.0
-
-# Skip whole-page image fallbacks for figure-heavy pages
-python pdf_to_epub.py scan.pdf --no-images</pre>
-
-        <p class="python-lang-note">
-          <strong>What the converter does now:</strong>
-          it prefers native PDF text when available, falls back to OCR for image-only
-          pages, and tries to extract figures/tables inline instead of embedding
-          every page as a full-page image.
-        </p>
-
-        <p class="python-lang-note">
-          <strong>Supported <code>--lang</code> values:</strong>
-          <code>eng</code> (English, default),
-          <code>fra</code> (French),
-          <code>deu</code> (German),
-          <code>spa</code> (Spanish),
-          <code>ita</code> (Italian),
-          <code>por</code> (Portuguese),
-          <code>rus</code> (Russian),
-          <code>chi_sim</code> (Chinese Simplified),
-          <code>jpn</code> (Japanese),
-          <code>ara</code> (Arabic).
-        </p>
+    <footer class="site-footer">
+      <div class="site-shell footer-inner">
+        <div>
+          <h2 class="footer-title">PDF to EPUB</h2>
+          <p class="footer-copy">
+            A tool-first site for converting PDFs into readable EPUBs, with supporting OCR and ebook guides.
+          </p>
+        </div>
+        <div class="footer-links">
+          <a href="index.html">Home</a>
+          <a href="guides/index.html">Guides</a>
+          <a href="about.html">About</a>
+          <a href="privacy.html">Privacy</a>
+          <a href="pdf_to_epub.py">Python script</a>
+          <a href="format_epub.py">Formatter</a>
+        </div>
       </div>
-    </section>
-
-    <!-- format_epub.py download card -->
-    <section class="card python-card" aria-labelledby="fmtScriptHeading">
-      <h2 id="fmtScriptHeading" class="python-card-title">🔧 Format an Existing EPUB</h2>
-      <p class="python-card-desc">
-        Already have an EPUB from <code>pdf_to_epub.py</code>? Use this script to
-        post-process it locally — merging fragmented OCR lines into real paragraphs,
-        detecting headings, removing stray page numbers, deduplicating TOC noise,
-        and adding a clean stylesheet.
-      </p>
-
-      <a class="button button-download" href="format_epub.py" download="format_epub.py">
-        Download format_epub.py
-      </a>
-
-      <div class="python-steps">
-        <h3 class="python-steps-title">How to use it</h3>
-        <ol class="python-steps-list">
-          <li>
-            <strong>No extra dependencies</strong> — runs with Python 3.8+ and no pip installs.
-          </li>
-          <li>
-            <strong>Run the script</strong> on an existing EPUB when you want the
-            formatter by itself:
-            <pre class="python-code">python format_epub.py book.epub</pre>
-            A new file <code>book_formatted.epub</code> is saved next to the original.
-          </li>
-          <li>
-            <strong>Custom output path</strong> (optional):
-            <pre class="python-code">python format_epub.py book.epub --output book_clean.epub</pre>
-          </li>
-        </ol>
-        <p class="python-lang-note">
-          <strong>Tip:</strong> for new conversions, use <code>pdf_to_epub.py --format</code>
-          so the formatter runs automatically at the end.
-        </p>
-      </div>
-    </section>
-
-    <footer class="center footer-note">
-      <p>Your PDF never leaves your device — all processing happens locally in your browser.</p>
     </footer>
-
   </div>
-
-  <!-- PDF.js for rendering PDF pages to canvas -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
-          integrity="sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf7xJE8YWIUHMn+oCQ=="
-          crossorigin="anonymous"></script>
-  <!-- Tesseract.js for OCR -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.5/dist/tesseract.min.js"
-          crossorigin="anonymous"></script>
-  <!-- JSZip for building the EPUB archive -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
-          integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
-          crossorigin="anonymous"></script>
 
   <script src="scripts/script.js"></script>
 </body>
