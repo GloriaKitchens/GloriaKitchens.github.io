@@ -213,6 +213,214 @@
     return canvas;
   }
 
+  // ── EPUB stylesheet ───────────────────────────
+  const EPUB_STYLESHEET = `body {
+  font-family: Georgia, 'Times New Roman', Times, serif;
+  font-size: 1em;
+  line-height: 1.6;
+  max-width: 38em;
+  margin: 0 auto;
+  padding: 1em 1.5em 3em;
+  color: #1a1a1a;
+}
+p {
+  margin-top: 0;
+  margin-bottom: 0.8em;
+  text-align: justify;
+}
+h1, h2, h3, h4 {
+  font-family: Georgia, serif;
+  font-weight: bold;
+  line-height: 1.3;
+  margin-top: 1.8em;
+  margin-bottom: 0.4em;
+}
+h2 { font-size: 1.2em; }
+h3 { font-size: 1.05em; }
+`;
+
+  // ── Formatting helpers (mirrors format_epub.py logic) ──
+  const ALL_CAPS_RE   = /^[A-Z0-9\s.,;:\-&/()'"]{3,80}$/;
+  const PART_RE       = /^PART\s+[IVX0-9]+/i;
+  const CHAPTER_RE    = /^CHAPTER\s+\d+/i;
+  // Section RE: text after the number must begin with two uppercase chars
+  // to avoid matching photo captions like "6. Mobile radiation monitoring: …"
+  const SECTION_RE    = /^\d+\.\d*\s+[A-Z][A-Z]/;
+  const PAGE_NUM_RE   = /^\d{1,4}$/;
+  const NBSP          = '\u00a0';
+
+  // Rejection helpers
+  // Matches compound initials like "J.A." or "A.C." (letter-period-letter or letter-period-comma)
+  const BIBLIO_RE = /[A-Z]\.[A-Z,]/g;
+  const TABLE_RE  = /[A-Z]\.\s*\(\d+\)/g;     // table data like "R.A. (21)"
+  // Technical drawing/report reference codes: ORNL-DWG 78-6264, OTO 2954-77R, ISBN …
+  const TECH_REF_RE = /\bORNL\b|^ISBN\b|\b\d{1,4}-\d{3,}[A-Z]?\b|\b[A-Z]{2,4}\s+\d{4,}[-R]/;
+  // Incomplete heading: ends with a dangling preposition/conjunction
+  const DANGLING_END_RE = /\s+(?:OF|AND|FOR|TO|IN|AN|THE|A|WITH|FROM|BY|ON|OR|AT|AS|BUT|THAT|WHICH)$/;
+  // Safety callouts, imperative verbs, and conjunction/preposition starters
+  const IMPERATIVE_STARTERS = new Set([
+    'ATTACH', 'BEND', 'BUILD', 'CHECK', 'CONNECT', 'COVER', 'CUT', 'DO',
+    'DRILL', 'FILL', 'FIT', 'FOLD', 'GLUE', 'HOLD', 'INSERT', 'KEEP',
+    'MAKE', 'MARK', 'MOUNT', 'NOTE', 'PLACE', 'PULL', 'PUSH', 'PUT',
+    'REMOVE', 'SCREW', 'SECURE', 'SEE', 'SET', 'SLIDE', 'TAPE', 'TIE',
+    'TRIM', 'TURN', 'TWIST', 'TO', 'USE', 'WRAP', 'WARNING',
+    'CAUTION', 'NOTICE', 'DANGER',
+    'AND', 'OR', 'BUT', 'FOR', 'FROM', 'IF',
+  ]);
+
+  function isNbspLine(text) {
+    const t = text.trim();
+    return t === '' || t === NBSP || t === '\u00a0';
+  }
+
+  // Returns true if any word has non-standard mixed casing (OCR garbage indicator)
+  function hasMixedCaseWord(text) {
+    return text.split(/\s+/).some(word => {
+      const alpha = word.replace(/[^a-zA-Z]/g, '');
+      if (alpha.length < 3) return false;
+      const allUpper = alpha === alpha.toUpperCase();
+      const allLower = alpha === alpha.toLowerCase();
+      const titleCase = alpha[0] === alpha[0].toUpperCase() &&
+                        alpha.slice(1) === alpha.slice(1).toLowerCase();
+      return !(allUpper || allLower || titleCase);
+    });
+  }
+
+  function classifyHeading(text) {
+    const t = text.trim();
+    if (!t) return null;
+
+    // Rejection rules
+    // 1. Starts with quote/bracket → footnote or OCR noise
+    if ("'\"([{".includes(t[0])) return null;
+    // 2. Fewer than 4 alpha characters → OCR garbage
+    if ((t.match(/[a-zA-Z]/g) || []).length < 4) return null;
+    // 3. Two+ compound initials → bibliography entry
+    if ((t.match(BIBLIO_RE) || []).length >= 2) return null;
+    // 4. Two+ "Initial.(number)" patterns → table/exposure data row
+    if ((t.match(TABLE_RE)  || []).length >= 2) return null;
+    // 5. Digit-start that isn't a section number (3.1, 42.) → OCR noise or reversed text
+    if (/^\d/.test(t) && !/^\d+\./.test(t)) return null;
+    // 6. Technical drawing/report reference codes → figure labels, ISBN, date codes
+    if (TECH_REF_RE.test(t)) return null;
+    // 7. Truncated OCR line ending mid-word
+    if (t.endsWith('-')) return null;
+    // 8. Trailing comma → sentence fragment
+    if (t.endsWith(',')) return null;
+    // 9. Ends with dangling preposition/conjunction → truncated OCR line
+    if (DANGLING_END_RE.test(t)) return null;
+    // 10. Non-standard mixed casing → upside-down/mirrored OCR garbage
+    if (hasMixedCaseWord(t)) return null;
+    // 11. Imperative-verb, callout, or conjunction/preposition starters
+    const firstWord = t.split(/\s+/)[0].replace(/[^A-Za-z]/g, '').toUpperCase();
+    if (IMPERATIVE_STARTERS.has(firstWord)) return null;
+    // 12. "SECTION X-Y" cross-section labels (not numeric section headings)
+    if (/^SECTION\s+[A-Z]/i.test(t) && !/^SECTION\s+\d/i.test(t)) return null;
+    // 13. Unbalanced parentheses → OCR captured a fragment
+    if ((t.match(/\(/g) || []).length !== (t.match(/\)/g) || []).length) return null;
+
+    if (PART_RE.test(t) || CHAPTER_RE.test(t)) {
+      // Reject if the line is a sentence: has lowercase beyond the chapter label
+      // and is long (e.g. "Chapter 2 examines the record-keeping practices…")
+      const hasLower = /[a-z]/.test(t);
+      if (hasLower && t.split(/\s+/).length > 6) return null;
+      return 'h2';
+    }
+    if (ALL_CAPS_RE.test(t) && t !== t.toLowerCase()) return 'h2';
+    if (SECTION_RE.test(t)) return 'h3';
+    return null;
+  }
+
+  // OCR corrections: digit-for-letter, bracket confusion, whitespace cleanup
+  const OCR_SUBS = [
+    [/\b1s\b/g,  'is'],
+    [/\b1t\b/g,  'it'],
+    [/\b1n\b/g,  'in'],
+    [/\b0f\b/g,  'of'],
+    [/\b1f\b/g,  'if'],
+    [/\[AEA\b/g, 'IAEA'],
+  ];
+  function fixOcrText(text) {
+    for (const [pattern, replacement] of OCR_SUBS) {
+      text = text.replace(pattern, replacement);
+    }
+    text = text.replace(/ {2,}/g, ' ');
+    text = text.replace(/\s+([,;:])/g, '$1');
+    return text;
+  }
+
+  function mergeLines(lines) {
+    const parts = [];
+    for (const line of lines) {
+      if (!line) continue;
+      if (parts.length && parts[parts.length - 1].endsWith('-')) {
+        parts[parts.length - 1] = parts[parts.length - 1].slice(0, -1) + line;
+      } else if (parts.length) {
+        parts.push(' ' + line);
+      } else {
+        parts.push(line);
+      }
+    }
+    return parts.join('').trim();
+  }
+
+  function formatPageLines(rawLines) {
+    // Split into blocks using nbsp lines as delimiters
+    const blocks = [];
+    let current = [];
+    for (const raw of rawLines) {
+      if (isNbspLine(raw)) {
+        if (current.length) { blocks.push(current); current = []; }
+      } else {
+        current.push(raw.trim());
+      }
+    }
+    if (current.length) blocks.push(current);
+
+    const result = []; // [{tag, text}]
+    for (const block of blocks) {
+      const lines = block.filter(l => l.length > 0);
+      if (!lines.length) continue;
+
+      const headingTag = classifyHeading(lines[0]);
+      if (headingTag) {
+        result.push({ tag: headingTag, text: lines[0] });
+        const rest = lines.slice(1);
+        if (rest.length) {
+          const merged = fixOcrText(mergeLines(rest));
+          if (merged && !PAGE_NUM_RE.test(merged)) {
+            result.push({ tag: 'p', text: merged });
+          }
+        }
+      } else {
+        const merged = fixOcrText(mergeLines(lines));
+        if (!merged || PAGE_NUM_RE.test(merged)) continue;
+        result.push({ tag: 'p', text: merged });
+      }
+    }
+
+    // Context isolation: demote all h2s after the first in a consecutive run
+    // (no body paragraph between them). Mirrors format_epub.py flush_p() logic.
+    const isolated = [];
+    let prevWasHeading = false;
+    for (const el of result) {
+      if (el.tag === 'h2') {
+        const isStructural = PART_RE.test(el.text) || CHAPTER_RE.test(el.text) ||
+                             /^TABLE\b/i.test(el.text);
+        if (prevWasHeading && !isStructural) {
+          isolated.push({ tag: 'p', text: el.text }); // demote; prevWasHeading stays true
+        } else {
+          isolated.push(el);
+          prevWasHeading = true;
+        }
+      } else {
+        isolated.push(el);
+        prevWasHeading = (el.tag === 'h3'); // body text resets; h3 counts as a heading
+      }
+    }
+    return isolated;
+  }
+
   // ── Build a minimal valid EPUB 3 ─────────────
   function buildEpub(title, pageTexts, lang) {
     const zip  = new JSZip();
@@ -233,41 +441,75 @@
 
     const oebps = zip.folder('OEBPS');
 
-    // One XHTML chapter per page
-    const spineItems = pageTexts.map((text, i) => {
+    // Stylesheet
+    oebps.file('stylesheet.css', EPUB_STYLESHEET);
+
+    // Format each page, collect spine items and TOC entries (only pages with a heading)
+    const spineItems = [];
+    const tocEntries = []; // {file, label}
+    pageTexts.forEach((text, i) => {
       const fname = `page${i + 1}.xhtml`;
-      oebps.file(fname, makeXhtml(title, i + 1, text, lang));
-      return fname;
+      const rawLines  = text.split('\n').map(l => l.trim());
+      const formatted = formatPageLines(rawLines);
+      const firstHeading = formatted.find(el => el.tag === 'h2' || el.tag === 'h3');
+      // Only add to TOC if a heading was detected; headingless pages are
+      // assumed to be front matter, blank pages, or index/appendix content.
+      if (firstHeading) tocEntries.push({ file: fname, label: firstHeading.text });
+      oebps.file(fname, makeXhtmlFromFormatted(title, i + 1, formatted, lang));
+      spineItems.push(fname);
     });
+
+    // TOC deduplication: heading text appearing 3+ times is a repeated label
+    // (e.g. appendix sub-headings). Keep only the first occurrence in the nav.
+    const labelCounts = {};
+    for (const { label } of tocEntries) {
+      labelCounts[label] = (labelCounts[label] || 0) + 1;
+    }
+    const seenLabels = new Set();
+    const deduped = tocEntries.filter(({ label }) => {
+      if (labelCounts[label] >= 3) {
+        if (seenLabels.has(label)) return false;
+        seenLabels.add(label);
+      }
+      return true;
+    });
+    const tocFiles  = deduped.map(e => e.file);
+    const tocLabels = deduped.map(e => e.label);
 
     // content.opf  (package document)
     oebps.file('content.opf', makeOpf(id, title, lang, spineItems));
 
     // toc.ncx  (legacy nav for older readers)
-    oebps.file('toc.ncx', makeNcx(id, title, spineItems));
+    oebps.file('toc.ncx', makeNcx(id, title, tocFiles, tocLabels));
 
     // nav.xhtml  (EPUB 3 nav document)
-    oebps.file('nav.xhtml', makeNav(title, spineItems, lang));
+    oebps.file('nav.xhtml', makeNav(title, tocFiles, tocLabels, lang));
 
     return zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
   }
 
-  function makeXhtml(title, pageNum, text, lang) {
-    const escaped = escapeXml(text);
-    // Preserve paragraph structure: blank lines become spacer paragraphs
-    const body = escaped.split('\n').map(l => l.trim()
-      ? `<p>${l}</p>`
-      : `<p>&#160;</p>`
-    ).join('\n');
+  function makeXhtmlFromFormatted(title, pageNum, formatted, lang) {
+    const body = formatted
+      .map(({ tag, text: t }) => `<${tag}>${escapeXml(t)}</${tag}>`)
+      .join('\n') || '<p>&#160;</p>';
     return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="${escapeXml(lang)}" lang="${escapeXml(lang)}">
-<head><meta charset="utf-8"/><title>${escapeXml(title)} — Page ${pageNum}</title></head>
+<head>
+  <meta charset="utf-8"/>
+  <title>${escapeXml(title)} — Page ${pageNum}</title>
+  <link rel="stylesheet" type="text/css" href="stylesheet.css"/>
+</head>
 <body>
-<h2>Page ${pageNum}</h2>
-${body || '<p> </p>'}
+${body}
 </body>
 </html>`;
+  }
+
+  function makeXhtml(title, pageNum, text, lang) {
+    const rawLines  = text.split('\n').map(l => l.trim());
+    const formatted = formatPageLines(rawLines);
+    return makeXhtmlFromFormatted(title, pageNum, formatted, lang);
   }
 
   function makeOpf(id, title, lang, spineItems) {
@@ -278,6 +520,8 @@ ${body || '<p> </p>'}
       '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>';
     const ncxItem =
       '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>';
+    const cssItem =
+      '<item id="css" href="stylesheet.css" media-type="text/css"/>';
     const spineRefs = spineItems.map((_, i) =>
       `<itemref idref="page${i + 1}"/>`
     ).join('\n    ');
@@ -293,6 +537,7 @@ ${body || '<p> </p>'}
   <manifest>
     ${navItem}
     ${ncxItem}
+    ${cssItem}
     ${manifestItems}
   </manifest>
   <spine toc="ncx">
@@ -301,10 +546,10 @@ ${body || '<p> </p>'}
 </package>`;
   }
 
-  function makeNcx(id, title, spineItems) {
+  function makeNcx(id, title, spineItems, tocLabels) {
     const navPoints = spineItems.map((f, i) =>
       `<navPoint id="np${i + 1}" playOrder="${i + 1}">` +
-        `<navLabel><text>Page ${i + 1}</text></navLabel>` +
+        `<navLabel><text>${escapeXml(tocLabels[i])}</text></navLabel>` +
         `<content src="${f}"/>` +
       `</navPoint>`
     ).join('\n  ');
@@ -318,9 +563,9 @@ ${body || '<p> </p>'}
 </ncx>`;
   }
 
-  function makeNav(title, spineItems, lang) {
+  function makeNav(title, spineItems, tocLabels, lang) {
     const items = spineItems.map((f, i) =>
-      `<li><a href="${f}">Page ${i + 1}</a></li>`
+      `<li><a href="${f}">${escapeXml(tocLabels[i])}</a></li>`
     ).join('\n      ');
     return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
