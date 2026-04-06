@@ -206,6 +206,11 @@ a:hover {
   font-size: 0.94rem;
 }
 
+.backend-note-warning {
+  border-color: #d9cff8;
+  background: #f5f1ff;
+}
+
 .backend-note code {
   color: #7f2078;
   font-family: 'Courier New', Courier, monospace;

@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;800&family=Boldonse&display=swap" rel="stylesheet">
 </head>
-<body data-api-base="">
+<body data-api-base="https://pdf-to-epub-api.onrender.com">
   <div class="page-wrapper">
     <header class="site-header">
       <div class="site-shell">
@@ -72,6 +72,10 @@
             hosted on <code>github.io</code>, set the <code>data-api-base</code> attribute on
             <code>&lt;body&gt;</code> to your deployed backend URL, such as
             <code>https://pdf-to-epub-api.onrender.com</code>.
+          </p>
+          <p class="backend-note backend-note-warning">
+            <strong>Free instance note:</strong> the Render web service may spin down after inactivity,
+            so the first request can take 50 seconds or more while the backend wakes up.
           </p>
         </div>
 
