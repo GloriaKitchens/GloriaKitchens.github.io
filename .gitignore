@@ -1,0 +1,12 @@
+# Large scanned PDFs — download with: python download_corpus.py
+ScannedPDFs/*.pdf
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
