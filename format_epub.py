@@ -254,8 +254,12 @@ def _classify_heading(text: str) -> str | None:
     # 13. Unbalanced parentheses → OCR captured a fragment "(FROM...", "LEATHER (FROM"
     if t.count('(') != t.count(')'):
         return None
-
-    # ── Positive rules ───────────────────────────────────────────────────────
+    # 14. Figure/table label lines → "FIG I", "FIG. 3.", "TABLE IV" — these are
+    #     captions or labels, not section headings (even though they are all-caps).
+    if re.match(r'^FIG(?:URE)?\.?\s*[IVX\d]', t, re.IGNORECASE):
+        return None
+    if re.match(r'^TABLE\s+[IVX\d]', t, re.IGNORECASE):
+        return None
     if _PART_RE.match(t) or _CHAP_RE.match(t):
         # Reject if the line is clearly a sentence (has lowercase letters beyond the
         # chapter/part number and label, e.g. "Chapter 2 examines the record…")

@@ -1,5 +1,5 @@
-# Large scanned PDFs — download with: python download_corpus.py
-ScannedPDFs/*.pdf
+# Downloaded corpus and generated conversion artifacts
+ScannedPDFs/
 
 # Python cache
 __pycache__/

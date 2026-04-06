@@ -14,7 +14,7 @@
 
     <header class="center">
       <h1>PDF → EPUB</h1>
-      <p class="subtitle">Convert a scanned PDF to a searchable text EPUB — all in your browser</p>
+      <p class="subtitle">Convert PDFs to readable EPUBs with browser tools or the command-line pipeline</p>
     </header>
 
     <main class="card">
@@ -91,8 +91,9 @@
       <h2 id="pyScriptHeading" class="python-card-title">🐍 Python Script</h2>
       <p class="python-card-desc">
         Prefer to work offline or process large files on the command line?
-        Download the standalone Python script — it does the same OCR-powered
-        PDF → EPUB conversion on your own machine.
+        Download the standalone Python script — it handles native text layers,
+        OCR fallback, inline figure extraction, and optional post-formatting on
+        your own machine.
       </p>
 
       <a class="button button-download" href="pdf_to_epub.py" download="pdf_to_epub.py">
@@ -124,21 +125,35 @@
             <pre class="python-code">pip install pymupdf pytesseract Pillow</pre>
           </li>
           <li>
-            <strong>Run the script</strong>:
-            <pre class="python-code">python pdf_to_epub.py scan.pdf</pre>
-            The EPUB is saved next to the PDF with the same base name.
+            <strong>Run the recommended one-step workflow</strong>:
+            <pre class="python-code">python pdf_to_epub.py scan.pdf --format</pre>
+            The EPUB is saved next to the PDF with the same base name and then
+            cleaned up with table-of-contents + heading formatting.
           </li>
         </ol>
 
-        <h3 class="python-steps-title">Common options</h3>
-        <pre class="python-code"># Set a custom title and output path
+        <h3 class="python-steps-title">Common usage patterns</h3>
+        <pre class="python-code"># Recommended: convert and format in one pass
+python pdf_to_epub.py scan.pdf --format
+
+# Set a custom title and output path
 python pdf_to_epub.py scan.pdf --title "My Novel" --output my_novel.epub
 
 # OCR a French document
 python pdf_to_epub.py scan.pdf --lang fra
 
 # Increase render scale for better accuracy (slower)
-python pdf_to_epub.py scan.pdf --scale 3.0</pre>
+python pdf_to_epub.py scan.pdf --scale 3.0
+
+# Skip whole-page image fallbacks for figure-heavy pages
+python pdf_to_epub.py scan.pdf --no-images</pre>
+
+        <p class="python-lang-note">
+          <strong>What the converter does now:</strong>
+          it prefers native PDF text when available, falls back to OCR for image-only
+          pages, and tries to extract figures/tables inline instead of embedding
+          every page as a full-page image.
+        </p>
 
         <p class="python-lang-note">
           <strong>Supported <code>--lang</code> values:</strong>
@@ -152,6 +167,44 @@ python pdf_to_epub.py scan.pdf --scale 3.0</pre>
           <code>chi_sim</code> (Chinese Simplified),
           <code>jpn</code> (Japanese),
           <code>ara</code> (Arabic).
+        </p>
+      </div>
+    </section>
+
+    <!-- format_epub.py download card -->
+    <section class="card python-card" aria-labelledby="fmtScriptHeading">
+      <h2 id="fmtScriptHeading" class="python-card-title">🔧 Format an Existing EPUB</h2>
+      <p class="python-card-desc">
+        Already have an EPUB from <code>pdf_to_epub.py</code>? Use this script to
+        post-process it locally — merging fragmented OCR lines into real paragraphs,
+        detecting headings, removing stray page numbers, deduplicating TOC noise,
+        and adding a clean stylesheet.
+      </p>
+
+      <a class="button button-download" href="format_epub.py" download="format_epub.py">
+        Download format_epub.py
+      </a>
+
+      <div class="python-steps">
+        <h3 class="python-steps-title">How to use it</h3>
+        <ol class="python-steps-list">
+          <li>
+            <strong>No extra dependencies</strong> — runs with Python 3.8+ and no pip installs.
+          </li>
+          <li>
+            <strong>Run the script</strong> on an existing EPUB when you want the
+            formatter by itself:
+            <pre class="python-code">python format_epub.py book.epub</pre>
+            A new file <code>book_formatted.epub</code> is saved next to the original.
+          </li>
+          <li>
+            <strong>Custom output path</strong> (optional):
+            <pre class="python-code">python format_epub.py book.epub --output book_clean.epub</pre>
+          </li>
+        </ol>
+        <p class="python-lang-note">
+          <strong>Tip:</strong> for new conversions, use <code>pdf_to_epub.py --format</code>
+          so the formatter runs automatically at the end.
         </p>
       </div>
     </section>

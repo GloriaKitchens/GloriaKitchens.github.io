@@ -318,6 +318,9 @@ h3 { font-size: 1.05em; }
     if (/^SECTION\s+[A-Z]/i.test(t) && !/^SECTION\s+\d/i.test(t)) return null;
     // 13. Unbalanced parentheses → OCR captured a fragment
     if ((t.match(/\(/g) || []).length !== (t.match(/\)/g) || []).length) return null;
+    // 14. Figure/table label lines → "FIG I", "FIG. 3.", "TABLE IV" are captions, not headings
+    if (/^FIG(?:URE)?\.?\s*[IVX\d]/i.test(t)) return null;
+    if (/^TABLE\s+[IVX\d]/i.test(t)) return null;
 
     if (PART_RE.test(t) || CHAPTER_RE.test(t)) {
       // Reject if the line is a sentence: has lowercase beyond the chapter label

@@ -161,8 +161,13 @@ def _get_jpeg_bytes(img: 'Image.Image', max_width: int = _FIGURE_MAX_WIDTH) -> b
 # boxes mean that body text lines sometimes measure 1.2-1.3× due to ascending
 # characters, OCR merge, or ink spread.  A heading needs to be noticeably
 # larger to be reliably distinguished.
-_H2_HEIGHT_RATIO = 1.55   # ≥155 % of median → main section heading
-_H3_HEIGHT_RATIO = 1.30   # ≥130 % of median → sub-section heading
+_H2_HEIGHT_RATIO = 1.55   # ≥155 % of median → main section heading (OCR bboxes)
+_H3_HEIGHT_RATIO = 1.30   # ≥130 % of median → sub-section heading (OCR bboxes)
+
+# Font-size ratios for native text heading detection (digital PDFs with a text layer).
+# Lower than the OCR equivalents since precise vector font metrics are available.
+_H2_NATIVE_RATIO = 1.15   # ≥115 % of body median → main section heading
+_H3_NATIVE_RATIO = 1.05   # ≥105 % of body median → sub-section heading
 
 # Minimum fraction of alphabetic characters that must be UPPERCASE before a
 # height-promoted line is accepted as a heading.  This gate prevents sentence-
@@ -211,6 +216,19 @@ def _looks_like_heading(text: str) -> bool:
     first = t[0] if t else ''
     if first in ('(', '[', '{', "'", '"', ',', '.', '\u2018', '\u2019'):
         return False
+    # Structural patterns (always accept before other filters so numbered
+    # headings like "1. INTRODUCTION" or "2.1. BACKGROUND" are not rejected
+    # by the digit-start guard below).
+    if re.match(r'^(?:Chapter|Appendix)\s+', t, re.IGNORECASE):
+        return True
+    if re.match(r'^Part\s+[IVX\d]', t, re.IGNORECASE):
+        return True
+    if re.match(r'^Section\s+\d', t, re.IGNORECASE):   # "Section 3" not "SECTION A-A"
+        return True
+    # Numbered section headings: "1. TITLE", "3.1 TITLE", "2.1. TITLE"
+    # Requires ALL-CAPS start after the number so "6. Mobile radiation…" is rejected.
+    if re.match(r'^\d+(?:\.\d+)*\.?\s+[A-Z]{2}', t):
+        return True
     # Digit-start: page labels, OCR garbage (e.g. "98ed 'SNOLLONULSNI 7'")
     if first.isdigit():
         return False
@@ -222,15 +240,6 @@ def _looks_like_heading(text: str) -> bool:
     total_ns = sum(1 for c in t if not c.isspace())
     if total_ns > 0 and non_alpha_ns / total_ns > 0.30:
         return False
-    # Structural patterns (always accept regardless of case)
-    if re.match(r'^(?:Chapter|Appendix)\s+', t, re.IGNORECASE):
-        return True
-    if re.match(r'^Part\s+[IVX\d]', t, re.IGNORECASE):
-        return True
-    if re.match(r'^Section\s+\d', t, re.IGNORECASE):   # "Section 3" not "SECTION A-A"
-        return True
-    if re.match(r'^\d+\.\d*\s+[A-Z]{2}', t):           # "3.1 TITLE"
-        return True
     # Require mostly uppercase
     upper_frac = sum(1 for c in alpha if c.isupper()) / len(alpha)
     if upper_frac < _HEADING_UPPER_FRAC:
@@ -247,8 +256,10 @@ def _looks_like_heading(text: str) -> bool:
 
 
 # Caption patterns for inline figure/table extraction
-_FIG_CAPTION_RE  = re.compile(r'^FIG(?:URE)?\.?\s*\d', re.IGNORECASE)
-_TABLE_HEADER_RE = re.compile(r'^TABLE\s+[IVX\d]',     re.IGNORECASE)
+# \d matches Arabic numerals; [IVX\d] also covers Roman numeral figure labels
+# like "FIG I", "FIG II", "FIG. IV" which appear in some government publications.
+_FIG_CAPTION_RE  = re.compile(r'^FIG(?:URE)?\.?\s*[IVX\d]', re.IGNORECASE)
+_TABLE_HEADER_RE = re.compile(r'^TABLE\s+[IVX\d]',           re.IGNORECASE)
 
 # Minimum page-height fraction a cropped region must occupy to be a figure
 _MIN_FIGURE_HEIGHT_FRAC = 0.08
@@ -282,6 +293,10 @@ def _extract_embedded_images(
         x0, y0, x1, y1 = bbox
         # Skip images that are too small to be a real figure
         if page_area > 0 and ((x1 - x0) * (y1 - y0)) / page_area < 0.05:
+            continue
+        # Skip images that cover almost the entire page — those are full-page
+        # background scans embedded in searchable/OCR-layered PDFs, not figures.
+        if page_area > 0 and ((x1 - x0) * (y1 - y0)) / page_area > 0.85:
             continue
         # Convert PDF-point coordinates → pixel coordinates
         px0 = max(0, int(x0 * scale))
@@ -397,16 +412,17 @@ def _ocr_page_with_layout(
         text = line['text']
 
         if _FIG_CAPTION_RE.match(text):
-            # Figure region = page top (or end of previous text) → top of caption
+            # Figure region = page top (or end of previous body text) → top of caption.
+            # Only lines with 5+ words count as body-text anchors; shorter lines
+            # (box labels, callouts inside the figure) are treated as part of the figure.
             fig_bottom = line['top']
-            # Walk backwards to find the last non-blank, non-figure line
             fig_top = 0
             for prev_li in range(li - 1, -1, -1):
                 prev = lines_with_pos[prev_li]
                 if prev_li in caption_line_set:
                     continue
-                if prev['text'].strip() and prev['text'] != '\xa0':
-                    # Use the bottom of that line + small margin as the fig start
+                if len(prev['text'].split()) >= 5:
+                    # Use the bottom of that body-text line as the figure start
                     fig_top = prev['bottom'] + 4
                     break
             region_h = fig_bottom - fig_top
@@ -486,7 +502,185 @@ def _ocr_page_with_layout(
     return content, word_count, inline_figs
 
 
-# ── EPUB content builders ─────────────────────────────────────────────────────
+def _has_native_text(page: 'fitz.Page', min_chars: int = 100) -> bool:
+    """Return True if *page* has a meaningful native text layer.
+
+    PDFs where the entire page content is rasterised (pure scans) return False;
+    PDFs with an embedded text layer — whether from native typography or from
+    an OCR overlay — return True.
+    """
+    try:
+        return len(page.get_text("text").strip()) >= min_chars
+    except Exception:
+        return False
+
+
+def _extract_native_page_content(
+    page: 'fitz.Page',
+    pil_img: 'Image.Image',
+    scale: float,
+) -> tuple[list[tuple[str, str]], int, list[tuple[bytes, str]]]:
+    """Extract content from a *digital* PDF page using its native text layer.
+
+    Replaces OCR for pages that already have an embedded text layer (digital
+    PDFs or searchable PDFs with an OCR overlay).  Returns
+    ``(content, word_count, inline_figs)`` with the same structure as
+    :func:`_ocr_page_with_layout` so the rest of the pipeline is unchanged.
+
+    Heading levels are inferred from font-size ratios relative to the page-wide
+    median font size, using :data:`_H2_NATIVE_RATIO` and
+    :data:`_H3_NATIVE_RATIO`.  Figure captions are detected with the same
+    regex patterns used for OCR, but figure bounding boxes are derived from
+    native text coordinates rather than pixel measurements.
+    """
+    try:
+        page_dict = page.get_text("dict")
+    except Exception:
+        return [], 0, []
+
+    blocks = [b for b in page_dict.get("blocks", []) if b.get("type") == 0]
+    if not blocks:
+        return [], 0, []
+
+    img_h, img_w = pil_img.height, pil_img.width
+
+    # ── Build line list sorted top-to-bottom ─────────────────────────────────
+    lines_with_pos: list[dict] = []
+    all_font_sizes: list[float] = []
+
+    for bi, block in enumerate(sorted(blocks, key=lambda b: b["bbox"][1])):
+        for line in block.get("lines", []):
+            spans = line.get("spans", [])
+            if not spans:
+                continue
+            # Normalise multi-space runs (PDF text layers often have spacing artefacts)
+            raw_text = " ".join(s.get("text", "") for s in spans)
+            line_text = re.sub(r'  +', ' ', raw_text).strip()
+            if not line_text:
+                continue
+            font_sizes = [s.get("size", 0.0) for s in spans if s.get("text", "").strip()]
+            if not font_sizes:
+                continue
+            line_font = max(font_sizes)
+            all_font_sizes.extend(font_sizes)
+            bbox = line.get("bbox", (0.0, 0.0, 0.0, 0.0))
+            lines_with_pos.append({
+                'text':     line_text,
+                'font':     line_font,
+                'top':      bbox[1],   # PDF points
+                'bottom':   bbox[3],
+                'block_id': bi,
+                'tag':      'p',       # filled in below
+            })
+
+    if not lines_with_pos:
+        return [], 0, []
+
+    # Page-wide median font size (body text baseline)
+    sorted_sizes = sorted(all_font_sizes)
+    page_median = sorted_sizes[len(sorted_sizes) // 2] if sorted_sizes else 10.0
+
+    # Assign heading tags based on font-size ratio + text-pattern gate
+    for line in lines_with_pos:
+        ratio = (line['font'] / page_median) if page_median > 0 else 1.0
+        if ratio >= _H2_NATIVE_RATIO and _looks_like_heading(line['text']):
+            line['tag'] = 'h2'
+        elif ratio >= _H3_NATIVE_RATIO and _looks_like_heading(line['text']):
+            line['tag'] = 'h3'
+
+    # ── Caption-based figure detection ───────────────────────────────────────
+    # Same logic as _ocr_page_with_layout(); coordinates are in PDF points and
+    # are converted to pixels only when cropping the PIL image.
+    inline_figs: list[tuple[bytes, str]] = []
+    figure_y_ranges: list[tuple[int, int]] = []   # pixel coordinates
+    caption_line_set: set[int] = set()
+
+    for li, line in enumerate(lines_with_pos):
+        text = line['text']
+
+        if _FIG_CAPTION_RE.match(text):
+            fig_bottom_pt = line['top']
+            fig_top_pt = 0.0
+            for prev_li in range(li - 1, -1, -1):
+                prev = lines_with_pos[prev_li]
+                if prev_li in caption_line_set:
+                    continue
+                # Only 5+-word lines count as body-text anchors
+                if len(prev['text'].split()) >= 5:
+                    fig_top_pt = prev['bottom'] + 2
+                    break
+            fig_top_px    = max(0,     int(fig_top_pt        * scale))
+            fig_bottom_px = min(img_h, int(fig_bottom_pt     * scale))
+            cap_bottom_px = min(img_h, int(line['bottom']    * scale))
+            region_h = fig_bottom_px - fig_top_px
+            if region_h >= img_h * _MIN_FIGURE_HEIGHT_FRAC:
+                crop = pil_img.crop((0, fig_top_px, img_w, cap_bottom_px))
+                inline_figs.append((_get_jpeg_bytes(crop), text))
+                figure_y_ranges.append((fig_top_px, cap_bottom_px))
+                caption_line_set.add(li)
+
+        elif _TABLE_HEADER_RE.match(text):
+            tbl_top_pt    = line['top']
+            line_h_pt     = max(1.0, line['bottom'] - line['top'])
+            tbl_bottom_pt = lines_with_pos[-1]['bottom']
+            for next_li in range(li + 1, len(lines_with_pos)):
+                nxt = lines_with_pos[next_li]
+                if nxt['tag'] in ('h2', 'h3'):
+                    tbl_bottom_pt = nxt['top'] - 2
+                    break
+                if (nxt['top'] - lines_with_pos[next_li - 1]['bottom']) > 3 * line_h_pt:
+                    tbl_bottom_pt = nxt['top'] - 2
+                    break
+            tbl_top_px    = max(0,     int(tbl_top_pt    * scale))
+            tbl_bottom_px = min(img_h, int(tbl_bottom_pt * scale))
+            region_h = tbl_bottom_px - tbl_top_px
+            if region_h >= img_h * _MIN_FIGURE_HEIGHT_FRAC:
+                crop = pil_img.crop((0, tbl_top_px, img_w, tbl_bottom_px))
+                inline_figs.append((_get_jpeg_bytes(crop), text))
+                figure_y_ranges.append((tbl_top_px, tbl_bottom_px))
+                caption_line_set.add(li)
+
+    # ── Build final content list ──────────────────────────────────────────────
+    def _pt_to_px(y: float) -> int:
+        return int(y * scale)
+
+    def _in_figure(top_px: int, bottom_px: int) -> bool:
+        return any(top_px < fy1 and bottom_px > fy0 for fy0, fy1 in figure_y_ranges)
+
+    content: list[tuple[str, str]] = []
+    word_count = sum(len(l['text'].split()) for l in lines_with_pos)
+    inserted_fig_idxs: set[int] = set()
+    prev_block_id: int | None = None
+
+    for li, line in enumerate(lines_with_pos):
+        top_px    = _pt_to_px(line['top'])
+        bottom_px = _pt_to_px(line['bottom'])
+
+        # Inject any figures whose region ends before this line
+        for fi, (fy0, fy1) in enumerate(figure_y_ranges):
+            if fi not in inserted_fig_idxs and fy1 <= top_px:
+                content.append(('figure-img', str(fi)))
+                inserted_fig_idxs.add(fi)
+
+        # Skip lines inside figure regions (caption text is in the JPEG)
+        if li in caption_line_set or _in_figure(top_px, bottom_px):
+            continue
+
+        # Paragraph separator on block change
+        bid = line['block_id']
+        if prev_block_id is not None and bid != prev_block_id:
+            if content and content[-1] != ('p', '\xa0'):
+                content.append(('p', '\xa0'))
+        prev_block_id = bid
+
+        content.append((line['tag'], line['text']))
+
+    # Append any remaining un-injected figures
+    for fi in range(len(figure_y_ranges)):
+        if fi not in inserted_fig_idxs:
+            content.append(('figure-img', str(fi)))
+
+    return content, word_count, inline_figs
 
 def _make_xhtml(title: str, page_num: int,
                 content: 'list[tuple[str, str]] | str', lang: str,
@@ -814,36 +1008,43 @@ def main() -> None:
     total = len(doc)
     print(f'Pages:    {total}')
 
-    # ── OCR each page ─────────────────────────────────────────────────────────
+    # ── Process each page ─────────────────────────────────────────────────────
     matrix = fitz.Matrix(args.scale, args.scale)
     page_data: list[tuple] = []
     figure_count = 0
     inline_fig_count = 0
+    native_count = 0
     for i in range(total):
-        print(f'  OCR page {i + 1}/{total}…', end='\r', flush=True)
         page = doc[i]
         pix = page.get_pixmap(matrix=matrix, colorspace=fitz.csRGB)
         img = Image.frombytes('RGB', [pix.width, pix.height], pix.samples)
 
-        content, word_count, caption_figs = _ocr_page_with_layout(img, lang=args.lang)
+        # Choose extraction path: native text layer (digital PDFs) or OCR (scans)
+        if _has_native_text(page):
+            print(f'  Page {i + 1}/{total} [native]…', end='\r', flush=True)
+            content, word_count, caption_figs = _extract_native_page_content(
+                page, img, args.scale)
+            # Native-text pages: skip _extract_embedded_images (the full-page
+            # background scan is already handled via caption-based cropping above)
+            all_inline_figs: list[tuple[bytes, str]] = list(caption_figs)
+            native_count += 1
+        else:
+            print(f'  OCR page {i + 1}/{total}…', end='\r', flush=True)
+            content, word_count, caption_figs = _ocr_page_with_layout(img, lang=args.lang)
 
-        # Layer A: embedded images from digital PDFs
-        embedded = []
-        if embed_images:
-            embedded = _extract_embedded_images(page, img, args.scale)
+            # Layer A: partial embedded images from digital PDFs
+            all_inline_figs = list(caption_figs)
+            if embed_images:
+                embedded = _extract_embedded_images(page, img, args.scale)
+                if embedded:
+                    prepend: list[tuple[str, str]] = []
+                    for _top_px, _bottom_px, emb_bytes in embedded:
+                        idx = len(all_inline_figs)
+                        all_inline_figs.append((emb_bytes, ''))
+                        prepend.append(('figure-img', str(idx)))
+                    content = prepend + content
 
-        # Merge embedded images into the content list (inserted at start, since
-        # embedded images in digital PDFs are typically at the top of the page)
-        all_inline_figs: list[tuple[bytes, str]] = list(caption_figs)
-        if embedded:
-            prepend: list[tuple[str, str]] = []
-            for top_px, _bottom_px, emb_bytes in embedded:
-                idx = len(all_inline_figs)
-                all_inline_figs.append((emb_bytes, ''))
-                prepend.append(('figure-img', str(idx)))
-            content = prepend + content
-
-        # Layer C: whole-page image for figure/table-only pages
+        # Whole-page image for figure/table-only pages (no text, no inline figs)
         img_bytes = None
         if embed_images and word_count < _FIGURE_WORD_THRESHOLD and not all_inline_figs:
             img_bytes = _get_jpeg_bytes(img)
@@ -852,7 +1053,13 @@ def main() -> None:
         inline_fig_count += len(all_inline_figs)
         page_data.append((content, img_bytes, all_inline_figs))
     doc.close()
-    print(f'  OCR complete — {total} page(s) processed.          ')
+    ocr_count = total - native_count
+    if native_count and ocr_count:
+        print(f'  Done — {native_count} native-text page(s), {ocr_count} OCR page(s).          ')
+    elif native_count:
+        print(f'  Done — {total} page(s) extracted from native text layer.          ')
+    else:
+        print(f'  OCR complete — {total} page(s) processed.          ')
     if figure_count:
         print(f'  Figure pages with embedded images: {figure_count}')
     if inline_fig_count:
