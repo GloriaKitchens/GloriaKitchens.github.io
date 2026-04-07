@@ -10,6 +10,6 @@ services:
       - key: PDF_TO_EPUB_CORS_ORIGINS
         value: https://gloriakitchens.github.io
       - key: PDF_TO_EPUB_MAX_UPLOAD_MB
-        value: "100"
+        value: "50"
       - key: PDF_TO_EPUB_JOB_TTL_SECONDS
         value: "3600"

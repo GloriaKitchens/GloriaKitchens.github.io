@@ -60,6 +60,11 @@
             <strong>Free instance note:</strong> the Render web service may spin down after inactivity,
             so the first request can take 50 seconds or more while the backend wakes up.
           </p>
+          <p class="backend-note">
+            <strong>Queue note:</strong> conversions run one at a time to keep the service stable.
+            If another conversion is in progress yours will wait in line — expect
+            <strong>several minutes</strong> per PDF.
+          </p>
         </div>
 
         <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Drop zone: drag and drop a PDF here, or press Enter to choose a file">

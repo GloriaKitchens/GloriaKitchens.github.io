@@ -23,6 +23,10 @@
     /\.github\.io$/i.test(window.location.hostname) ||
     window.location.protocol === 'file:';
 
+  // Render scale sent to the server (matches the server-side default of 1.5;
+  // higher values grow pixmaps quadratically and can exhaust server RAM).
+  const DEFAULT_SCALE = '1.5';
+
   let selectedFile = null;
   let currentJobId = null;
   let pollTimer = null;
@@ -93,7 +97,7 @@
       formData.append('pdf', selectedFile);
       formData.append('title', bookTitleInput.value.trim());
       formData.append('lang', langSelect.value);
-      formData.append('scale', '2.0');
+      formData.append('scale', DEFAULT_SCALE);
       formData.append('no_images', 'false');
 
       const response = await fetch(apiUrl('/api/convert'), {
@@ -107,7 +111,7 @@
 
       currentJobId = payload.job_id;
       debugLog(`Job queued: ${currentJobId}`);
-      showProgress(8, 'Job queued...');
+      showProgress(8, 'Job queued — conversion typically takes several minutes...');
       startPolling(currentJobId);
     } catch (error) {
       showError('Could not start conversion: ' + (error.message || error));

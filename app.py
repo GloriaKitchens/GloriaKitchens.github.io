@@ -15,6 +15,7 @@ Render deployment:
 from __future__ import annotations
 
 import os
+import queue as _queue
 import re
 import shutil
 import subprocess
@@ -33,9 +34,13 @@ REPO_ROOT = Path(__file__).resolve().parent
 TEMP_ROOT = Path(tempfile.gettempdir()) / 'pdf-to-epub-jobs'
 TEMP_ROOT.mkdir(parents=True, exist_ok=True)
 
-MAX_UPLOAD_MB = int(os.getenv('PDF_TO_EPUB_MAX_UPLOAD_MB', '100'))
+MAX_UPLOAD_MB = int(os.getenv('PDF_TO_EPUB_MAX_UPLOAD_MB', '50'))
 JOB_TTL_SECONDS = int(os.getenv('PDF_TO_EPUB_JOB_TTL_SECONDS', '3600'))
 MAX_LOG_LINES = 200
+# Maximum render scale accepted from API callers.  Scale 2.0 (144 effective DPI)
+# is sufficient for high-quality Tesseract OCR.  Higher values grow the per-page
+# pixmap quadratically and exhaust the service's 512 MB RAM budget on Render Starter.
+MAX_SCALE = float(os.getenv('PDF_TO_EPUB_MAX_SCALE', '2.0'))
 
 app = FastAPI(title='PDF to EPUB API')
 
@@ -55,6 +60,58 @@ if cors_origins:
 
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
+
+# ── Job queue ─────────────────────────────────────────────────────────────────
+# A single-worker FIFO queue ensures only one conversion runs at a time, keeping
+# peak RAM use within the Render Starter 512 MB limit.  Concurrent requests are
+# accepted immediately and held as 'queued' until the worker is free.
+
+_job_queue: _queue.Queue[str] = _queue.Queue()
+
+
+def _queue_worker() -> None:
+    """Single background thread — drains _job_queue one job at a time."""
+    while True:
+        job_id = _job_queue.get()
+        try:
+            _run_job(job_id)
+        except Exception as exc:
+            # Catch-all so the worker never dies.  _run_job already updates the
+            # job to 'failed'; this branch fires only for unexpected errors.
+            try:
+                _update_job(
+                    job_id,
+                    status='failed',
+                    message=f'Unexpected error: {exc}',
+                    finished_at=time.time(),
+                )
+                _append_log(job_id, f'[worker] unexpected error: {exc}')
+            except Exception:
+                pass  # job may already be cleaned up
+        finally:
+            _job_queue.task_done()
+
+
+_worker_thread = threading.Thread(target=_queue_worker, daemon=True, name='epub-worker')
+_worker_thread.start()
+
+
+def _get_queue_position(job_id: str) -> int | None:
+    """Return the 1-based queue position for *job_id*, or None if not in queue.
+
+    This snapshot is taken under the queue's internal mutex so the list is
+    consistent at the moment of the call.  A small race exists between the
+    snapshot and the caller using the result: the worker may dequeue the item
+    immediately after the mutex is released, causing the position to drop to
+    None even though the job is still in its 'queued' state for a brief moment.
+    This is harmless — the next poll will reflect the updated status.
+    """
+    with _job_queue.mutex:
+        queue_list = list(_job_queue.queue)
+    try:
+        return queue_list.index(job_id) + 1
+    except ValueError:
+        return None
 
 
 def _cleanup_expired_jobs() -> None:
@@ -114,7 +171,9 @@ def _parse_progress(line: str, current_progress: int) -> tuple[int, str | None]:
         current = int(match.group(1))
         total = max(1, int(match.group(2)))
         progress = 10 + int((current / total) * 75)
-        return min(progress, 89), f'Processing page {current} of {total}...'
+        # Use max() so the bar never goes backwards (page messages are now
+        # emitted during EPUB assembly in the streaming approach).
+        return max(current_progress, min(progress, 89)), f'Processing page {current} of {total}...'
     if 'Loading PDF' in line:
         return max(current_progress, 5), 'Loading PDF...'
     if 'Pages:' in line:
@@ -229,14 +288,22 @@ async def create_conversion_job(
     pdf: UploadFile = File(...),
     title: str = Form(''),
     lang: str = Form('eng'),
-    scale: float = Form(2.0),
+    scale: float = Form(1.5),
     no_images: bool = Form(False),
 ) -> JSONResponse:
     _cleanup_expired_jobs()
 
+    # Cap render scale to keep memory use within the Render Starter limit (512 MB).
+    # At 2.0x a single A4 page occupies ~26 MB uncompressed; beyond that OOM risk
+    # grows rapidly.  1.5x is the sweet-spot for OCR quality vs. memory.
+    scale = min(scale, 2.0)
+
     filename = pdf.filename or 'upload.pdf'
     if not filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail='Only PDF uploads are supported.')
+
+    # Clamp scale to avoid runaway memory on the Render Starter instance.
+    scale = min(scale, MAX_SCALE)
 
     job_id = uuid.uuid4().hex
     work_dir = TEMP_ROOT / job_id
@@ -285,8 +352,7 @@ async def create_conversion_job(
     with jobs_lock:
         jobs[job_id] = job
 
-    thread = threading.Thread(target=_run_job, args=(job_id,), daemon=True)
-    thread.start()
+    _job_queue.put(job_id)
 
     return JSONResponse(
         {
@@ -301,12 +367,25 @@ async def create_conversion_job(
 @app.get('/api/jobs/{job_id}')
 def get_job_status(job_id: str) -> dict:
     job = _get_job(job_id)
+
+    # Compute live queue position while the job is waiting.
+    queue_position: int | None = None
+    message = job['message']
+    if job['status'] == 'queued':
+        queue_position = _get_queue_position(job_id)
+        if queue_position is not None:
+            message = (
+                f'Position {queue_position} in queue — '
+                'conversion typically takes several minutes per PDF.'
+            )
+
     response = {
         'id': job['id'],
         'status': job['status'],
         'progress': job['progress'],
-        'message': job['message'],
+        'message': message,
         'source_name': job['source_name'],
+        'queue_position': queue_position,
         'logs': job.get('logs', []),
     }
     if job['status'] == 'completed':
