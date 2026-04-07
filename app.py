@@ -118,7 +118,9 @@ def _parse_progress(line: str, current_progress: int) -> tuple[int, str | None]:
         current = int(match.group(1))
         total = max(1, int(match.group(2)))
         progress = 10 + int((current / total) * 75)
-        return min(progress, 89), f'Processing page {current} of {total}...'
+        # Use max() so the bar never goes backwards (page messages are now
+        # emitted during EPUB assembly in the streaming approach).
+        return max(current_progress, min(progress, 89)), f'Processing page {current} of {total}...'
     if 'Loading PDF' in line:
         return max(current_progress, 5), 'Loading PDF...'
     if 'Pages:' in line:
@@ -233,10 +235,15 @@ async def create_conversion_job(
     pdf: UploadFile = File(...),
     title: str = Form(''),
     lang: str = Form('eng'),
-    scale: float = Form(2.0),
+    scale: float = Form(1.5),
     no_images: bool = Form(False),
 ) -> JSONResponse:
     _cleanup_expired_jobs()
+
+    # Cap render scale to keep memory use within the Render Starter limit (512 MB).
+    # At 2.0x a single A4 page occupies ~26 MB uncompressed; beyond that OOM risk
+    # grows rapidly.  1.5x is the sweet-spot for OCR quality vs. memory.
+    scale = min(scale, 2.0)
 
     filename = pdf.filename or 'upload.pdf'
     if not filename.lower().endswith('.pdf'):
