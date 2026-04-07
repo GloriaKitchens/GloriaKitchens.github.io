@@ -33,9 +33,13 @@ REPO_ROOT = Path(__file__).resolve().parent
 TEMP_ROOT = Path(tempfile.gettempdir()) / 'pdf-to-epub-jobs'
 TEMP_ROOT.mkdir(parents=True, exist_ok=True)
 
-MAX_UPLOAD_MB = int(os.getenv('PDF_TO_EPUB_MAX_UPLOAD_MB', '100'))
+MAX_UPLOAD_MB = int(os.getenv('PDF_TO_EPUB_MAX_UPLOAD_MB', '50'))
 JOB_TTL_SECONDS = int(os.getenv('PDF_TO_EPUB_JOB_TTL_SECONDS', '3600'))
 MAX_LOG_LINES = 200
+# Maximum render scale accepted from API callers.  Scale 2.0 (144 effective DPI)
+# is sufficient for high-quality Tesseract OCR.  Higher values grow the per-page
+# pixmap quadratically and exhaust the service's 512 MB RAM budget on Render Starter.
+MAX_SCALE = float(os.getenv('PDF_TO_EPUB_MAX_SCALE', '2.0'))
 
 app = FastAPI(title='PDF to EPUB API')
 
@@ -237,6 +241,9 @@ async def create_conversion_job(
     filename = pdf.filename or 'upload.pdf'
     if not filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail='Only PDF uploads are supported.')
+
+    # Clamp scale to avoid runaway memory on the Render Starter instance.
+    scale = min(scale, MAX_SCALE)
 
     job_id = uuid.uuid4().hex
     work_dir = TEMP_ROOT / job_id
