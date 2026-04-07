@@ -27,9 +27,27 @@
   // higher values grow pixmaps quadratically and can exhaust server RAM).
   const DEFAULT_SCALE = '1.5';
 
+  // Timeout for the initial upload + job-creation request.  The Render free
+  // tier can take up to ~60 s to wake from sleep before it even starts
+  // receiving the upload, so give it a generous 3-minute window.
+  const UPLOAD_TIMEOUT_MS = 3 * 60 * 1000;
+
+  // Timeout for individual job-status poll requests.  These are lightweight
+  // JSON reads that should complete quickly once the backend is warm.
+  const POLL_TIMEOUT_MS = 20 * 1000;
+
+  /** Returns true for errors that are safe to retry (timeout or network failure). */
+  function isTransientError(error) {
+    if (error == null) return false;
+    // AbortError = our own AbortController fired (request timed out).
+    // TypeError = browser-level network failure (DNS, connection refused, etc.).
+    return error.name === 'AbortError' || error instanceof TypeError;
+  }
+
   let selectedFile = null;
   let currentJobId = null;
   let pollTimer = null;
+  let pollInFlight = false;
 
   fileInput.addEventListener('change', () => {
     const file = fileInput.files[0];
@@ -90,7 +108,7 @@
     convertBtn.disabled = true;
 
     try {
-      showProgress(5, 'Uploading PDF...');
+      showProgress(5, 'Uploading PDF… (the backend may take up to a minute to wake up — please wait)');
       debugLog('Uploading PDF to the Python backend...');
 
       const formData = new FormData();
@@ -100,10 +118,18 @@
       formData.append('scale', DEFAULT_SCALE);
       formData.append('no_images', 'false');
 
-      const response = await fetch(apiUrl('/api/convert'), {
-        method: 'POST',
-        body: formData,
-      });
+      const uploadAbort = new AbortController();
+      const uploadTimeoutId = setTimeout(() => uploadAbort.abort(), UPLOAD_TIMEOUT_MS);
+      let response;
+      try {
+        response = await fetch(apiUrl('/api/convert'), {
+          method: 'POST',
+          body: formData,
+          signal: uploadAbort.signal,
+        });
+      } finally {
+        clearTimeout(uploadTimeoutId);
+      }
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload.detail || 'Failed to start conversion.');
@@ -114,21 +140,42 @@
       showProgress(8, 'Job queued — conversion typically takes several minutes...');
       startPolling(currentJobId);
     } catch (error) {
-      showError('Could not start conversion: ' + (error.message || error));
+      const isTimeout = isTransientError(error) && error.name === 'AbortError';
+      const message = isTimeout
+        ? 'The upload timed out — the backend may be starting up. Please wait a moment and try again.'
+        : 'Could not start conversion: ' + (error.message || error);
+      showError(message);
       convertBtn.disabled = false;
     }
   });
 
   function startPolling(jobId) {
-    pollJob(jobId);
-    pollTimer = window.setInterval(() => pollJob(jobId), 1500);
+    scheduleNextPoll(jobId);
+  }
+
+  function scheduleNextPoll(jobId) {
+    pollTimer = window.setTimeout(() => pollJob(jobId), 1500);
   }
 
   async function pollJob(jobId) {
+    if (pollInFlight) {
+      // Previous poll still in flight — reschedule without stacking requests.
+      scheduleNextPoll(jobId);
+      return;
+    }
+    pollInFlight = true;
     try {
-      const response = await fetch(apiUrl(`/api/jobs/${jobId}`), {
-        cache: 'no-store',
-      });
+      const pollAbort = new AbortController();
+      const pollTimeoutId = setTimeout(() => pollAbort.abort(), POLL_TIMEOUT_MS);
+      let response;
+      try {
+        response = await fetch(apiUrl(`/api/jobs/${jobId}`), {
+          cache: 'no-store',
+          signal: pollAbort.signal,
+        });
+      } finally {
+        clearTimeout(pollTimeoutId);
+      }
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload.detail || 'Failed to fetch job status.');
@@ -151,10 +198,21 @@
         stopPolling();
         throw new Error(payload.message || 'Conversion failed.');
       }
+
+      scheduleNextPoll(jobId);
     } catch (error) {
+      // Transient errors (timeout or network failure) should not abort the whole
+      // job — skip this cycle and let the next scheduled poll retry.
+      if (isTransientError(error)) {
+        debugLog('Poll request failed transiently — will retry.');
+        scheduleNextPoll(jobId);
+        return;
+      }
       stopPolling();
       showError('Conversion failed: ' + (error.message || error));
       convertBtn.disabled = false;
+    } finally {
+      pollInFlight = false;
     }
   }
 
@@ -195,9 +253,10 @@
 
   function stopPolling() {
     if (pollTimer) {
-      window.clearInterval(pollTimer);
+      window.clearTimeout(pollTimer);
       pollTimer = null;
     }
+    pollInFlight = false;
   }
 
   function showProgress(percent, text) {
