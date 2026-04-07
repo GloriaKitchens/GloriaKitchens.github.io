@@ -27,6 +27,20 @@
   // higher values grow pixmaps quadratically and can exhaust server RAM).
   const DEFAULT_SCALE = '1.5';
 
+  // Timeout for the initial upload + job-creation request.  The Render free
+  // tier can take up to ~60 s to wake from sleep before it even starts
+  // receiving the upload, so give it a generous 3-minute window.
+  const UPLOAD_TIMEOUT_MS = 3 * 60 * 1000;
+
+  // Timeout for individual job-status poll requests.  These are lightweight
+  // JSON reads that should complete quickly once the backend is warm.
+  const POLL_TIMEOUT_MS = 20 * 1000;
+
+  /** Returns true when an error was caused by an AbortController timeout. */
+  function isTimeoutError(error) {
+    return error != null && error.name === 'AbortError';
+  }
+
   let selectedFile = null;
   let currentJobId = null;
   let pollTimer = null;
@@ -90,7 +104,7 @@
     convertBtn.disabled = true;
 
     try {
-      showProgress(5, 'Uploading PDF...');
+      showProgress(5, 'Uploading PDF… (the backend may take up to a minute to wake up — please wait)');
       debugLog('Uploading PDF to the Python backend...');
 
       const formData = new FormData();
@@ -100,10 +114,18 @@
       formData.append('scale', DEFAULT_SCALE);
       formData.append('no_images', 'false');
 
-      const response = await fetch(apiUrl('/api/convert'), {
-        method: 'POST',
-        body: formData,
-      });
+      const uploadAbort = new AbortController();
+      const uploadTimeoutId = setTimeout(() => uploadAbort.abort(), UPLOAD_TIMEOUT_MS);
+      let response;
+      try {
+        response = await fetch(apiUrl('/api/convert'), {
+          method: 'POST',
+          body: formData,
+          signal: uploadAbort.signal,
+        });
+      } finally {
+        clearTimeout(uploadTimeoutId);
+      }
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload.detail || 'Failed to start conversion.');
@@ -114,7 +136,11 @@
       showProgress(8, 'Job queued — conversion typically takes several minutes...');
       startPolling(currentJobId);
     } catch (error) {
-      showError('Could not start conversion: ' + (error.message || error));
+      const isTimeout = isTimeoutError(error);
+      const message = isTimeout
+        ? 'The upload timed out — the backend may be starting up. Please wait a moment and try again.'
+        : 'Could not start conversion: ' + (error.message || error);
+      showError(message);
       convertBtn.disabled = false;
     }
   });
@@ -126,9 +152,17 @@
 
   async function pollJob(jobId) {
     try {
-      const response = await fetch(apiUrl(`/api/jobs/${jobId}`), {
-        cache: 'no-store',
-      });
+      const pollAbort = new AbortController();
+      const pollTimeoutId = setTimeout(() => pollAbort.abort(), POLL_TIMEOUT_MS);
+      let response;
+      try {
+        response = await fetch(apiUrl(`/api/jobs/${jobId}`), {
+          cache: 'no-store',
+          signal: pollAbort.signal,
+        });
+      } finally {
+        clearTimeout(pollTimeoutId);
+      }
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload.detail || 'Failed to fetch job status.');
@@ -152,6 +186,12 @@
         throw new Error(payload.message || 'Conversion failed.');
       }
     } catch (error) {
+      // A transient timeout or network hiccup on a poll request should not abort
+      // the whole job — just skip this poll cycle and let the interval fire again.
+      if (isTimeoutError(error)) {
+        debugLog('Poll request timed out — will retry on next interval.');
+        return;
+      }
       stopPolling();
       showError('Conversion failed: ' + (error.message || error));
       convertBtn.disabled = false;
