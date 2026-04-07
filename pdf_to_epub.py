@@ -891,7 +891,7 @@ def build_epub(output_path: Path, title: str,
 
             # Write whole-page image (low-word-count pages)
             image_ref = None
-            if img_bytes:
+            if img_bytes is not None and img_bytes:
                 img_filename = f'images/page{page_num}.jpg'
                 zf.writestr(f'OEBPS/{img_filename}', img_bytes)
                 image_manifest.append(
