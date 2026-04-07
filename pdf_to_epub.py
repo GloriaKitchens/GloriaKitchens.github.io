@@ -845,19 +845,39 @@ def _make_nav(title: str, spine_items: list, lang: str) -> str:
 # ── Core: build the EPUB zip ──────────────────────────────────────────────────
 
 def build_epub(output_path: Path, title: str,
-               page_data: 'list[tuple[list[tuple[str,str]] | str, bytes | None, list[tuple[bytes,str]]]]',
-               bcp47: str) -> None:
+               page_data: 'Iterable[tuple[list[tuple[str,str]] | str, bytes | None, list[tuple[bytes,str]]]]',
+               bcp47: str,
+               *,
+               total_pages: 'int | None' = None) -> None:
     """Write a valid EPUB 3 archive to *output_path*.
 
-    *page_data* is a list of ``(content, page_jpeg, inline_figs)`` tuples where:
+    *page_data* is an iterable (list **or** generator) of
+    ``(content, page_jpeg, inline_figs)`` tuples where:
     - *content* is a structured ``list[tuple[str,str]]`` from
       :func:`_ocr_page_with_layout` (or a plain ``str`` for legacy use).
     - *page_jpeg* is a whole-page JPEG for low-word-count pages (or ``None``).
     - *inline_figs* is a list of ``(jpeg_bytes, caption_text)`` for inline
       figures/tables detected on the page.
+
+    *total_pages* **must** be supplied when *page_data* is a generator (i.e.
+    when its length cannot be determined with ``len()``).  For list callers it
+    is optional and defaults to ``len(page_data)``.
+
+    Each page entry is consumed and immediately written to the archive so that
+    only one page's pixel data is held in memory at a time.
     """
     uid = f'book-{int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)}'
-    spine_items = [f'page{i + 1}.xhtml' for i in range(len(page_data))]
+    if total_pages is not None:
+        n_pages = total_pages
+    else:
+        try:
+            n_pages = len(page_data)  # type: ignore[arg-type]
+        except TypeError:
+            raise ValueError(
+                'total_pages must be provided when page_data is a generator '
+                'or other unsized iterable'
+            )
+    spine_items = [f'page{i + 1}.xhtml' for i in range(n_pages)]
     image_manifest: list[str] = []
 
     with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -1014,58 +1034,84 @@ def main() -> None:
     total = len(doc)
     print(f'Pages:    {total}')
 
-    # ── Process each page ─────────────────────────────────────────────────────
+    # ── Process pages and build EPUB in one streaming pass ────────────────────
+    # Using a generator avoids accumulating all page JPEG data in memory before
+    # writing; the zip file is written page-by-page so peak RSS stays roughly
+    # proportional to a single page's pixel data rather than the whole book.
     matrix = fitz.Matrix(args.scale, args.scale)
-    page_data: list[tuple] = []
-    figure_count = 0
-    inline_fig_count = 0
-    native_count = 0
-    for i in range(total):
-        page = doc[i]
-        pix = page.get_pixmap(matrix=matrix, colorspace=fitz.csRGB)
+    embed_images_flag = embed_images  # capture for closure
+    stats = {'figure': 0, 'inline': 0, 'native': 0}
 
-        # A blank or degenerate page may render as a zero-dimension pixmap.
-        # Skip it gracefully rather than crashing on JPEG encoding later.
-        if pix.width == 0 or pix.height == 0:
-            page_data.append(([], None, []))
-            continue
+    def _page_gen():
+        for i in range(total):
+            page = doc[i]
+            pix = page.get_pixmap(matrix=matrix, colorspace=fitz.csRGB)
 
-        img = Image.frombytes('RGB', [pix.width, pix.height], pix.samples)
+            # A blank or degenerate page may render as a zero-dimension pixmap.
+            # Skip it gracefully rather than crashing on JPEG encoding later.
+            # Free pix here (before creating a PIL Image) since there is nothing
+            # further to do with it on this code path.
+            if pix.width == 0 or pix.height == 0:
+                del pix
+                print(f'  Page {i + 1}/{total} [blank — skipped]', end='\r', flush=True)
+                yield ([], None, [])
+                continue
 
-        # Choose extraction path: native text layer (digital PDFs) or OCR (scans)
-        if _has_native_text(page):
-            print(f'  Page {i + 1}/{total} [native]…', end='\r', flush=True)
-            content, word_count, caption_figs = _extract_native_page_content(
-                page, img, args.scale)
-            # Native-text pages: skip _extract_embedded_images (the full-page
-            # background scan is already handled via caption-based cropping above)
-            all_inline_figs: list[tuple[bytes, str]] = list(caption_figs)
-            native_count += 1
-        else:
-            print(f'  OCR page {i + 1}/{total}…', end='\r', flush=True)
-            content, word_count, caption_figs = _ocr_page_with_layout(img, lang=args.lang)
+            # Build a PIL Image and immediately free the raw pixmap samples to
+            # avoid holding both the uncompressed pixmap and the PIL buffer at
+            # the same time (each can be tens of MB for a 2x-scaled page).
+            img = Image.frombytes('RGB', [pix.width, pix.height], pix.samples)
+            del pix
 
-            # Layer A: partial embedded images from digital PDFs
-            all_inline_figs = list(caption_figs)
-            if embed_images:
-                embedded = _extract_embedded_images(page, img, args.scale)
-                if embedded:
-                    prepend: list[tuple[str, str]] = []
-                    for _top_px, _bottom_px, emb_bytes in embedded:
-                        idx = len(all_inline_figs)
-                        all_inline_figs.append((emb_bytes, ''))
-                        prepend.append(('figure-img', str(idx)))
-                    content = prepend + content
+            # Choose extraction path: native text layer (digital PDFs) or OCR
+            if _has_native_text(page):
+                print(f'  Page {i + 1}/{total} [native]…', end='\r', flush=True)
+                content, word_count, caption_figs = _extract_native_page_content(
+                    page, img, args.scale)
+                # Native-text pages: skip _extract_embedded_images (the full-page
+                # background scan is already handled via caption-based cropping above)
+                all_inline_figs: list[tuple[bytes, str]] = list(caption_figs)
+                stats['native'] += 1
+            else:
+                print(f'  OCR page {i + 1}/{total}…', end='\r', flush=True)
+                content, word_count, caption_figs = _ocr_page_with_layout(img, lang=args.lang)
 
-        # Whole-page image for figure/table-only pages (no text, no inline figs)
-        img_bytes = None
-        if embed_images and word_count < _FIGURE_WORD_THRESHOLD and not all_inline_figs:
-            img_bytes = _get_jpeg_bytes(img)
-            figure_count += 1
+                # Layer A: partial embedded images from digital PDFs
+                all_inline_figs = list(caption_figs)
+                if embed_images_flag:
+                    embedded = _extract_embedded_images(page, img, args.scale)
+                    if embedded:
+                        prepend: list[tuple[str, str]] = []
+                        for _top_px, _bottom_px, emb_bytes in embedded:
+                            idx = len(all_inline_figs)
+                            all_inline_figs.append((emb_bytes, ''))
+                            prepend.append(('figure-img', str(idx)))
+                        content = prepend + content
 
-        inline_fig_count += len(all_inline_figs)
-        page_data.append((content, img_bytes, all_inline_figs))
+            # Whole-page image for figure/table-only pages (no text, no inline figs)
+            img_bytes = None
+            if embed_images_flag and word_count < _FIGURE_WORD_THRESHOLD and not all_inline_figs:
+                img_bytes = _get_jpeg_bytes(img)
+                stats['figure'] += 1
+
+            stats['inline'] += len(all_inline_figs)
+
+            # Release the large PIL image before yielding so the generator frame
+            # does not keep the pixel buffer alive while the caller is writing
+            # compressed data to the zip archive.
+            del img
+
+            yield (content, img_bytes, all_inline_figs)
+
+    # ── Build EPUB ────────────────────────────────────────────────────────────
+    # Note: page processing and EPUB writing are interleaved via the generator;
+    # per-page progress messages appear during build_epub() rather than before it.
+    build_epub(output_path, title, _page_gen(), bcp47, total_pages=total)
     doc.close()
+
+    native_count = stats['native']
+    figure_count = stats['figure']
+    inline_fig_count = stats['inline']
     ocr_count = total - native_count
     if native_count and ocr_count:
         print(f'  Done — {native_count} native-text page(s), {ocr_count} OCR page(s).          ')
@@ -1078,9 +1124,6 @@ def main() -> None:
     if inline_fig_count:
         print(f'  Inline figures/tables extracted:   {inline_fig_count}')
 
-    # ── Build EPUB ────────────────────────────────────────────────────────────
-    print('Building EPUB…')
-    build_epub(output_path, title, page_data, bcp47)
     size_kb = output_path.stat().st_size / 1024
     print(f'Done! Saved to: {output_path} ({size_kb:.1f} KB)')
 
