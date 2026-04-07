@@ -147,8 +147,12 @@ _FIGURE_MAX_WIDTH = 800
 def _get_jpeg_bytes(img: 'Image.Image', max_width: int = _FIGURE_MAX_WIDTH) -> bytes:
     """Downscale *img* to at most *max_width* pixels wide and return JPEG bytes."""
     w, h = img.size
+    if w == 0 or h == 0:
+        return b''
     if w > max_width:
-        new_h = int(h * max_width / w)
+        # Use max(1, …) to guard against integer truncation producing 0 for very
+        # short images (e.g. a degenerate blank page with an extreme aspect ratio).
+        new_h = max(1, int(h * max_width / w))
         img = img.resize((max_width, new_h), resample=1)  # LANCZOS=1 in Pillow ≥9
     buf = io.BytesIO()
     img.convert('RGB').save(buf, format='JPEG', quality=75, optimize=True)
@@ -887,7 +891,7 @@ def build_epub(output_path: Path, title: str,
 
             # Write whole-page image (low-word-count pages)
             image_ref = None
-            if img_bytes is not None:
+            if img_bytes:
                 img_filename = f'images/page{page_num}.jpg'
                 zf.writestr(f'OEBPS/{img_filename}', img_bytes)
                 image_manifest.append(
@@ -899,6 +903,8 @@ def build_epub(output_path: Path, title: str,
             # Write inline figure/table images
             inline_fig_refs: list[tuple[str, str]] = []
             for j, (fig_bytes, caption) in enumerate(inline_figs):
+                if not fig_bytes:
+                    continue
                 fig_filename = f'images/page{page_num}_fig{j + 1}.jpg'
                 zf.writestr(f'OEBPS/{fig_filename}', fig_bytes)
                 image_manifest.append(
@@ -1017,6 +1023,13 @@ def main() -> None:
     for i in range(total):
         page = doc[i]
         pix = page.get_pixmap(matrix=matrix, colorspace=fitz.csRGB)
+
+        # A blank or degenerate page may render as a zero-dimension pixmap.
+        # Skip it gracefully rather than crashing on JPEG encoding later.
+        if pix.width == 0 or pix.height == 0:
+            page_data.append(([], None, []))
+            continue
+
         img = Image.frombytes('RGB', [pix.width, pix.height], pix.samples)
 
         # Choose extraction path: native text layer (digital PDFs) or OCR (scans)
