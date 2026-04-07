@@ -36,14 +36,18 @@
   // JSON reads that should complete quickly once the backend is warm.
   const POLL_TIMEOUT_MS = 20 * 1000;
 
-  /** Returns true when an error was caused by an AbortController timeout. */
-  function isTimeoutError(error) {
-    return error != null && error.name === 'AbortError';
+  /** Returns true for errors that are safe to retry (timeout or network failure). */
+  function isTransientError(error) {
+    if (error == null) return false;
+    // AbortError = our own AbortController fired (request timed out).
+    // TypeError = browser-level network failure (DNS, connection refused, etc.).
+    return error.name === 'AbortError' || error instanceof TypeError;
   }
 
   let selectedFile = null;
   let currentJobId = null;
   let pollTimer = null;
+  let pollInFlight = false;
 
   fileInput.addEventListener('change', () => {
     const file = fileInput.files[0];
@@ -136,7 +140,7 @@
       showProgress(8, 'Job queued — conversion typically takes several minutes...');
       startPolling(currentJobId);
     } catch (error) {
-      const isTimeout = isTimeoutError(error);
+      const isTimeout = isTransientError(error) && error.name === 'AbortError';
       const message = isTimeout
         ? 'The upload timed out — the backend may be starting up. Please wait a moment and try again.'
         : 'Could not start conversion: ' + (error.message || error);
@@ -146,11 +150,20 @@
   });
 
   function startPolling(jobId) {
-    pollJob(jobId);
-    pollTimer = window.setInterval(() => pollJob(jobId), 1500);
+    scheduleNextPoll(jobId);
+  }
+
+  function scheduleNextPoll(jobId) {
+    pollTimer = window.setTimeout(() => pollJob(jobId), 1500);
   }
 
   async function pollJob(jobId) {
+    if (pollInFlight) {
+      // Previous poll still in flight — reschedule without stacking requests.
+      scheduleNextPoll(jobId);
+      return;
+    }
+    pollInFlight = true;
     try {
       const pollAbort = new AbortController();
       const pollTimeoutId = setTimeout(() => pollAbort.abort(), POLL_TIMEOUT_MS);
@@ -185,16 +198,21 @@
         stopPolling();
         throw new Error(payload.message || 'Conversion failed.');
       }
+
+      scheduleNextPoll(jobId);
     } catch (error) {
-      // A transient timeout or network hiccup on a poll request should not abort
-      // the whole job — just skip this poll cycle and let the interval fire again.
-      if (isTimeoutError(error)) {
-        debugLog('Poll request timed out — will retry on next interval.');
+      // Transient errors (timeout or network failure) should not abort the whole
+      // job — skip this cycle and let the next scheduled poll retry.
+      if (isTransientError(error)) {
+        debugLog('Poll request failed transiently — will retry.');
+        scheduleNextPoll(jobId);
         return;
       }
       stopPolling();
       showError('Conversion failed: ' + (error.message || error));
       convertBtn.disabled = false;
+    } finally {
+      pollInFlight = false;
     }
   }
 
@@ -235,9 +253,10 @@
 
   function stopPolling() {
     if (pollTimer) {
-      window.clearInterval(pollTimer);
+      window.clearTimeout(pollTimer);
       pollTimer = null;
     }
+    pollInFlight = false;
   }
 
   function showProgress(percent, text) {
