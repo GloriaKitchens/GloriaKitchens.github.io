@@ -39,6 +39,7 @@ Supported OCR language codes (--lang)
 
 import argparse
 import datetime
+import gc
 import io
 import re
 import sys
@@ -996,6 +997,13 @@ def main() -> None:
         action='store_true',
         help='run format_epub.py on the output after conversion (adds TOC and reformats headings)',
     )
+    parser.add_argument(
+        '--max-pages',
+        type=int,
+        default=0,
+        metavar='N',
+        help='refuse to convert PDFs with more than N pages (0 = no limit)',
+    )
     args = parser.parse_args()
 
     pdf_path = Path(args.pdf)
@@ -1010,9 +1018,10 @@ def main() -> None:
     embed_images = not args.no_images
 
     # Cap scale to keep per-page pixmap memory within the service's RAM budget.
-    # Scale 2.0 (144 effective DPI) already gives excellent Tesseract accuracy.
+    # Scale 1.5 (108 effective DPI) gives good Tesseract accuracy while keeping
+    # per-page memory well within the Render Starter 512 MB limit.
     # Going above this quadratically increases memory without meaningful OCR gain.
-    max_scale = 2.0
+    max_scale = 1.5
     scale = args.scale
     if scale > max_scale:
         print(
@@ -1037,6 +1046,14 @@ def main() -> None:
     doc = fitz.open(str(pdf_path))
     total = len(doc)
     print(f'Pages:    {total}')
+
+    # Enforce the page limit before doing any expensive processing.
+    if args.max_pages > 0 and total > args.max_pages:
+        doc.close()
+        sys.exit(
+            f'Error: PDF has {total} pages which exceeds the {args.max_pages}-page limit. '
+            f'Please split the PDF and convert each part separately.'
+        )
 
     # ── Process each page and stream into the EPUB archive ────────────────────
     # Using a generator avoids accumulating every page's JPEG bytes in memory
@@ -1100,6 +1117,13 @@ def main() -> None:
             # (img_bytes, all_inline_figs) are needed by build_epub, and those are
             # much smaller than the raw pixel buffer.
             del img
+
+            # Eagerly reclaim memory: run Python GC and shrink PyMuPDF's internal
+            # resource cache so that each page's allocations are freed before the
+            # next page is rendered.  This keeps peak RSS well within the 512 MB
+            # Render Starter budget even for long documents.
+            gc.collect()
+            fitz.TOOLS.store_shrink(100)
 
             stats['inline'] += len(all_inline_figs)
             yield (content, img_bytes, all_inline_figs)

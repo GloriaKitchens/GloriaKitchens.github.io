@@ -13,3 +13,7 @@ services:
         value: "50"
       - key: PDF_TO_EPUB_JOB_TTL_SECONDS
         value: "3600"
+      - key: PDF_TO_EPUB_MAX_SCALE
+        value: "1.5"
+      - key: PDF_TO_EPUB_MAX_PAGES
+        value: "150"

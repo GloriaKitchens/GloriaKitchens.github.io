@@ -38,10 +38,13 @@ TEMP_ROOT.mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD_MB = int(os.getenv('PDF_TO_EPUB_MAX_UPLOAD_MB', '50'))
 JOB_TTL_SECONDS = int(os.getenv('PDF_TO_EPUB_JOB_TTL_SECONDS', '3600'))
 MAX_LOG_LINES = 200
-# Maximum render scale accepted from API callers.  Scale 2.0 (144 effective DPI)
-# is sufficient for high-quality Tesseract OCR.  Higher values grow the per-page
-# pixmap quadratically and exhaust the service's 512 MB RAM budget on Render Starter.
-MAX_SCALE = float(os.getenv('PDF_TO_EPUB_MAX_SCALE', '2.0'))
+# Maximum render scale accepted from API callers.  Scale 1.5 (108 effective DPI)
+# gives good Tesseract OCR quality while keeping per-page pixmap memory well
+# within the service's 512 MB RAM budget on Render Starter.  Higher values grow
+# the per-page pixmap quadratically and risk OOM on large PDFs.
+MAX_SCALE = float(os.getenv('PDF_TO_EPUB_MAX_SCALE', '1.5'))
+# Maximum number of pages accepted per conversion job (0 = no limit).
+MAX_PAGES = int(os.getenv('PDF_TO_EPUB_MAX_PAGES', '200'))
 
 app = FastAPI(title='PDF to EPUB API')
 
@@ -73,7 +76,7 @@ _PERSIST_FIELDS = (
     'id', 'status', 'progress', 'message',
     'created_at', 'updated_at', 'finished_at',
     'work_dir', 'input_path', 'output_path', 'output_name',
-    'source_name', 'title', 'lang', 'scale', 'no_images',
+    'source_name', 'title', 'lang', 'scale', 'no_images', 'max_pages',
 )
 
 # UUID hex strings produced by uuid.uuid4().hex are always 32 lower-case hex
@@ -331,6 +334,8 @@ def _run_job(job_id: str) -> None:
         cmd.extend(['--scale', str(job['scale'])])
     if job.get('no_images'):
         cmd.append('--no-images')
+    if job.get('max_pages', 0) > 0:
+        cmd.extend(['--max-pages', str(job['max_pages'])])
 
     _update_job(job_id, status='running', progress=3, message='Starting conversion...')
     _append_log(job_id, 'Running: ' + ' '.join(cmd))
@@ -391,11 +396,6 @@ async def create_conversion_job(
 ) -> JSONResponse:
     _cleanup_expired_jobs()
 
-    # Cap render scale to keep memory use within the Render Starter limit (512 MB).
-    # At 2.0x a single A4 page occupies ~26 MB uncompressed; beyond that OOM risk
-    # grows rapidly.  1.5x is the sweet-spot for OCR quality vs. memory.
-    scale = min(scale, 2.0)
-
     filename = pdf.filename or 'upload.pdf'
     if not filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail='Only PDF uploads are supported.')
@@ -445,6 +445,7 @@ async def create_conversion_job(
         'lang': lang,
         'scale': scale,
         'no_images': no_images,
+        'max_pages': MAX_PAGES,
         'logs': [],
     }
     with jobs_lock:
