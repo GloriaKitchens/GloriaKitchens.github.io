@@ -14,6 +14,7 @@ Render deployment:
 
 from __future__ import annotations
 
+import json
 import os
 import queue as _queue
 import re
@@ -60,6 +61,91 @@ if cors_origins:
 
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
+
+# ── Disk persistence ──────────────────────────────────────────────────────────
+# Job metadata is persisted to a small JSON file inside each job's work
+# directory.  This lets the API recover gracefully when the server restarts
+# mid-conversion: a poll request that misses the in-memory dict can still
+# load the last-known state from disk and report a clear error to the browser
+# instead of returning a confusing 404 "Job not found".
+
+_PERSIST_FIELDS = (
+    'id', 'status', 'progress', 'message',
+    'created_at', 'updated_at', 'finished_at',
+    'work_dir', 'input_path', 'output_path', 'output_name',
+    'source_name', 'title', 'lang', 'scale', 'no_images',
+)
+
+# UUID hex strings produced by uuid.uuid4().hex are always 32 lower-case hex
+# characters.  Validating before path construction prevents path-traversal
+# attacks from malicious job_id values supplied via the URL.
+_JOB_ID_RE = re.compile(r'^[0-9a-f]{32}$')
+
+
+def _job_state_file(work_dir: str | Path) -> Path:
+    return Path(work_dir) / 'job.json'
+
+
+def _save_job_to_disk(job: dict) -> None:
+    """Persist the public fields of *job* to its work directory.
+
+    Called without the jobs_lock held only when *job* is already owned by the
+    current execution context (i.e. it was just created or a status update is
+    being written).  Disk write failures are silently swallowed so they never
+    crash the worker thread.
+    """
+    work_dir = job.get('work_dir')
+    if not work_dir:
+        return
+    try:
+        # Guard against path traversal: work_dir must be contained within TEMP_ROOT.
+        resolved = Path(work_dir).resolve()
+        if not resolved.is_relative_to(TEMP_ROOT.resolve()):
+            return
+        payload = {k: job.get(k) for k in _PERSIST_FIELDS if k in job}
+        _job_state_file(resolved).write_text(
+            json.dumps(payload, indent=2), encoding='utf-8'
+        )
+    except Exception:
+        pass
+
+
+def _load_job_from_disk(job_id: str) -> dict | None:
+    """Try to restore job state for *job_id* from disk.
+
+    Returns the job dict on success, or None if the state file does not exist
+    or is unreadable.  Jobs found in a non-terminal state are marked as failed
+    because a server restart means their subprocess is no longer running.
+    """
+    # Reject any job_id that is not a plain UUID hex string to prevent
+    # path-traversal attacks (e.g. job_id = "../../etc/passwd").
+    if not _JOB_ID_RE.match(job_id):
+        return None
+    state_file = TEMP_ROOT / job_id / 'job.json'
+    # Defense-in-depth: verify the constructed path is inside TEMP_ROOT.
+    if not state_file.resolve().is_relative_to(TEMP_ROOT.resolve()):
+        return None
+    if not state_file.exists():
+        return None
+    try:
+        payload: dict = json.loads(state_file.read_text(encoding='utf-8'))
+    except Exception:
+        return None
+    if payload.get('id') != job_id:
+        return None
+    # Subprocess is dead after restart -- mark in-flight jobs as failed.
+    if payload.get('status') in ('queued', 'running'):
+        now = time.time()
+        payload['status'] = 'failed'
+        payload['message'] = (
+            'Conversion was interrupted because the server restarted. '
+            'Please upload the file again.'
+        )
+        payload['finished_at'] = now
+        payload['updated_at'] = now
+    payload.setdefault('logs', [])
+    return payload
+
 
 # ── Job queue ─────────────────────────────────────────────────────────────────
 # A single-worker FIFO queue ensures only one conversion runs at a time, keeping
@@ -140,9 +226,17 @@ def _get_job(job_id: str) -> dict:
     _cleanup_expired_jobs()
     with jobs_lock:
         job = jobs.get(job_id)
-        if job is None:
-            raise HTTPException(status_code=404, detail='Job not found')
-        return dict(job)
+        if job is not None:
+            return dict(job)
+    # Not in memory — try to restore from disk (e.g. after a server restart).
+    restored = _load_job_from_disk(job_id)
+    if restored is None:
+        raise HTTPException(status_code=404, detail='Job not found')
+    # Cache the restored entry so subsequent polls are fast.
+    with jobs_lock:
+        if job_id not in jobs:
+            jobs[job_id] = restored
+    return dict(restored)
 
 
 def _update_job(job_id: str, **fields) -> None:
@@ -150,6 +244,10 @@ def _update_job(job_id: str, **fields) -> None:
         job = jobs[job_id]
         job.update(fields)
         job['updated_at'] = time.time()
+        # Persist to disk whenever the job reaches a terminal state so the
+        # result survives a server restart (e.g. the download URL stays valid).
+        if fields.get('status') in ('completed', 'failed'):
+            _save_job_to_disk(job)
 
 
 def _append_log(job_id: str, line: str) -> None:
@@ -351,6 +449,9 @@ async def create_conversion_job(
     }
     with jobs_lock:
         jobs[job_id] = job
+    # Persist immediately so a server restart before the job completes can
+    # still report a meaningful status to the browser instead of a bare 404.
+    _save_job_to_disk(job)
 
     _job_queue.put(job_id)
 

@@ -36,6 +36,10 @@
   // JSON reads that should complete quickly once the backend is warm.
   const POLL_TIMEOUT_MS = 20 * 1000;
 
+  // Maximum number of consecutive transient poll failures before giving up.
+  // At a 1.5 s poll interval this is roughly 45 s of lost connectivity.
+  const MAX_TRANSIENT_RETRIES = 30;
+
   /** Returns true for errors that are safe to retry (timeout or network failure). */
   function isTransientError(error) {
     if (error == null) return false;
@@ -48,6 +52,7 @@
   let currentJobId = null;
   let pollTimer = null;
   let pollInFlight = false;
+  let transientErrorCount = 0;
 
   fileInput.addEventListener('change', () => {
     const file = fileInput.files[0];
@@ -150,6 +155,7 @@
   });
 
   function startPolling(jobId) {
+    transientErrorCount = 0;
     scheduleNextPoll(jobId);
   }
 
@@ -181,6 +187,9 @@
         throw new Error(payload.detail || 'Failed to fetch job status.');
       }
 
+      // Successful response — reset the transient-error counter.
+      transientErrorCount = 0;
+
       showProgress(payload.progress || 0, payload.message || 'Processing...');
       syncLogs(payload.logs || []);
 
@@ -204,6 +213,16 @@
       // Transient errors (timeout or network failure) should not abort the whole
       // job — skip this cycle and let the next scheduled poll retry.
       if (isTransientError(error)) {
+        transientErrorCount++;
+        if (transientErrorCount >= MAX_TRANSIENT_RETRIES) {
+          stopPolling();
+          showError(
+            'Lost connection to the conversion server after several retries. ' +
+            'The server may have restarted -- please try uploading the file again.'
+          );
+          convertBtn.disabled = false;
+          return;
+        }
         debugLog('Poll request failed transiently — will retry.');
         scheduleNextPoll(jobId);
         return;
