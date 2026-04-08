@@ -41,6 +41,7 @@ import argparse
 import datetime
 import gc
 import io
+import os
 import re
 import sys
 import zipfile
@@ -1018,10 +1019,11 @@ def main() -> None:
     embed_images = not args.no_images
 
     # Cap scale to keep per-page pixmap memory within the service's RAM budget.
-    # Scale 1.5 (108 effective DPI) gives good Tesseract accuracy while keeping
-    # per-page memory well within the Render Starter 512 MB limit.
-    # Going above this quadratically increases memory without meaningful OCR gain.
-    max_scale = 1.5
+    # The limit is read from the same env var used by the API so that a single
+    # configuration change (e.g. upgrading to a higher-RAM plan) takes effect
+    # everywhere.  Defaults to 1.5 (108 effective DPI) which gives good Tesseract
+    # accuracy while keeping per-page pixmap memory well within 512 MB.
+    max_scale = float(os.getenv('PDF_TO_EPUB_MAX_SCALE', '1.5'))
     scale = args.scale
     if scale > max_scale:
         print(
