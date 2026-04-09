@@ -12,6 +12,7 @@
   const progressSection = document.getElementById('progressSection');
   const progressFill = document.getElementById('progressFill');
   const progressLabel = document.getElementById('progressLabel');
+  const memoryLabel = document.getElementById('memoryLabel');
   const resultSection = document.getElementById('resultSection');
   const downloadLink = document.getElementById('downloadLink');
   const errorSection = document.getElementById('errorSection');
@@ -191,6 +192,7 @@
       transientErrorCount = 0;
 
       showProgress(payload.progress || 0, payload.message || 'Processing...');
+      syncMemory(payload.memory || null);
       syncLogs(payload.logs || []);
 
       if (payload.status === 'completed') {
@@ -259,6 +261,23 @@
     debugLogEl.scrollTop = debugLogEl.scrollHeight;
   }
 
+  function syncMemory(memory) {
+    if (!memoryLabel) return;
+    const peak = memory && typeof memory.peak_rss_mb === 'number' ? memory.peak_rss_mb : null;
+    const current = memory && typeof memory.rss_mb === 'number' ? memory.rss_mb : null;
+    if (peak === null && current === null) {
+      memoryLabel.hidden = true;
+      memoryLabel.textContent = 'Memory: --';
+      return;
+    }
+
+    const parts = [];
+    if (current !== null) parts.push(`current ${current.toFixed(1)} MB`);
+    if (peak !== null) parts.push(`peak ${peak.toFixed(1)} MB`);
+    memoryLabel.hidden = false;
+    memoryLabel.textContent = `Memory: ${parts.join(', ')}`;
+  }
+
   function debugLog(line) {
     const lines = debugLogEl.value ? debugLogEl.value.split('\n') : [];
     lines.push(line);
@@ -301,6 +320,10 @@
   function hideResults() {
     resultSection.hidden = true;
     errorSection.hidden = true;
+    if (memoryLabel) {
+      memoryLabel.hidden = true;
+      memoryLabel.textContent = 'Memory: --';
+    }
   }
 
   function looksLikePdf(file) {

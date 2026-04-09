@@ -48,6 +48,8 @@ import zipfile
 from collections import defaultdict
 from pathlib import Path
 
+from memory_stats import get_process_memory_snapshot
+
 try:
     import fitz  # PyMuPDF
 except ImportError:
@@ -151,14 +153,38 @@ def _get_jpeg_bytes(img: 'Image.Image', max_width: int = _FIGURE_MAX_WIDTH) -> b
     w, h = img.size
     if w == 0 or h == 0:
         return b''
-    if w > max_width:
-        # Use max(1, …) to guard against integer truncation producing 0 for very
-        # short images (e.g. a degenerate blank page with an extreme aspect ratio).
-        new_h = max(1, int(h * max_width / w))
-        img = img.resize((max_width, new_h), resample=1)  # LANCZOS=1 in Pillow ≥9
-    buf = io.BytesIO()
-    img.convert('RGB').save(buf, format='JPEG', quality=75, optimize=True)
-    return buf.getvalue()
+    resized: Image.Image | None = None
+    rgb_img: Image.Image | None = None
+    working = img
+    try:
+        if w > max_width:
+            new_h = max(1, int(h * max_width / w))
+            resized = img.resize((max_width, new_h), resample=1)  # LANCZOS=1 in Pillow ≥9
+            working = resized
+        if working.mode != 'RGB':
+            rgb_img = working.convert('RGB')
+            working = rgb_img
+        buf = io.BytesIO()
+        working.save(buf, format='JPEG', quality=75, optimize=True)
+        return buf.getvalue()
+    finally:
+        if rgb_img is not None:
+            rgb_img.close()
+        if resized is not None:
+            resized.close()
+
+
+def _emit_memory_checkpoint(label: str) -> None:
+    snapshot = get_process_memory_snapshot()
+    rss = snapshot.get('rss_mb')
+    peak = snapshot.get('peak_rss_mb')
+    rss_text = 'n/a' if rss is None else f'{rss:.1f}'
+    peak_text = 'n/a' if peak is None else f'{peak:.1f}'
+    print(f'[memory] label={label} rss_mb={rss_text} peak_rss_mb={peak_text}', flush=True)
+
+
+def _should_emit_memory_checkpoint(page_num: int, total_pages: int) -> bool:
+    return page_num == 1 or page_num == total_pages or page_num % 10 == 0
 
 
 # Height ratios (relative to page median word height) that indicate a heading.
@@ -1042,12 +1068,14 @@ def main() -> None:
         print(f'Images:   enabled (pages with <{_FIGURE_WORD_THRESHOLD} words get a page image)')
     else:
         print(f'Images:   disabled (--no-images)')
+    _emit_memory_checkpoint('startup')
 
     # ── Load PDF ──────────────────────────────────────────────────────────────
     print('Loading PDF…')
     doc = fitz.open(str(pdf_path))
     total = len(doc)
     print(f'Pages:    {total}')
+    _emit_memory_checkpoint('after-load')
 
     # Enforce the page limit before doing any expensive processing.
     if args.max_pages > 0 and total > args.max_pages:
@@ -1128,6 +1156,9 @@ def main() -> None:
             fitz.TOOLS.store_shrink(100)
 
             stats['inline'] += len(all_inline_figs)
+            page_num = i + 1
+            if _should_emit_memory_checkpoint(page_num, total):
+                _emit_memory_checkpoint(f'after-page-{page_num}')
             yield (content, img_bytes, all_inline_figs)
 
     try:
@@ -1147,6 +1178,7 @@ def main() -> None:
         print(f'  Figure pages with embedded images: {stats["figures"]}')
     if stats['inline']:
         print(f'  Inline figures/tables extracted:   {stats["inline"]}')
+    _emit_memory_checkpoint('after-finalize')
     size_kb = output_path.stat().st_size / 1024
     print(f'Done! Saved to: {output_path} ({size_kb:.1f} KB)')
 
@@ -1160,6 +1192,7 @@ def main() -> None:
             print('Warning: format_epub.py not found beside pdf_to_epub.py — skipping.', file=sys.stderr)
         else:
             print('Formatting EPUB…')
+            _emit_memory_checkpoint('before-format')
             spec = importlib.util.spec_from_file_location('format_epub', fmt_script)
             fmt_mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(fmt_mod)
@@ -1173,6 +1206,7 @@ def main() -> None:
                 print(f'Formatted! Saved to: {output_path} ({size_kb:.1f} KB)')
             finally:
                 tmp_path.unlink(missing_ok=True)
+                _emit_memory_checkpoint('after-format')
 
 
 if __name__ == '__main__':

@@ -17,3 +17,5 @@ services:
         value: "1.5"
       - key: PDF_TO_EPUB_MAX_PAGES
         value: "150"
+      - key: PDF_TO_EPUB_MEMORY_SAMPLE_INTERVAL_SECONDS
+        value: "1.0"

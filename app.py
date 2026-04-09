@@ -31,6 +31,8 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
+from memory_stats import get_process_memory_snapshot
+
 REPO_ROOT = Path(__file__).resolve().parent
 TEMP_ROOT = Path(tempfile.gettempdir()) / 'pdf-to-epub-jobs'
 TEMP_ROOT.mkdir(parents=True, exist_ok=True)
@@ -38,13 +40,20 @@ TEMP_ROOT.mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD_MB = int(os.getenv('PDF_TO_EPUB_MAX_UPLOAD_MB', '50'))
 JOB_TTL_SECONDS = int(os.getenv('PDF_TO_EPUB_JOB_TTL_SECONDS', '3600'))
 MAX_LOG_LINES = 200
-# Maximum render scale accepted from API callers.  Scale 1.5 (108 effective DPI)
-# gives good Tesseract OCR quality while keeping per-page pixmap memory well
-# within the service's 512 MB RAM budget on Render Starter.  Higher values grow
-# the per-page pixmap quadratically and risk OOM on large PDFs.
-MAX_SCALE = float(os.getenv('PDF_TO_EPUB_MAX_SCALE', '1.5'))
+MAX_MEMORY_CHECKPOINTS = 25
+# Maximum render scale accepted from API callers. Scale 1.5 keeps per-page
+# pixmap memory within the Render free-tier budget for large PDFs.
+DEFAULT_SCALE = float(os.getenv('PDF_TO_EPUB_DEFAULT_SCALE', '1.5'))
+MAX_SCALE = float(os.getenv('PDF_TO_EPUB_MAX_SCALE', str(DEFAULT_SCALE)))
 # Maximum number of pages accepted per conversion job (0 = no limit).
 MAX_PAGES = int(os.getenv('PDF_TO_EPUB_MAX_PAGES', '200'))
+MEMORY_SAMPLE_INTERVAL_SECONDS = float(
+    os.getenv('PDF_TO_EPUB_MEMORY_SAMPLE_INTERVAL_SECONDS', '1.0')
+)
+MEMORY_LINE_RE = re.compile(
+    r'^\[memory\]\s+label=(?P<label>[A-Za-z0-9._-]+)\s+rss_mb='
+    r'(?P<rss>n/a|\d+(?:\.\d+)?)\s+peak_rss_mb=(?P<peak>n/a|\d+(?:\.\d+)?)$'
+)
 
 app = FastAPI(title='PDF to EPUB API')
 
@@ -203,6 +212,16 @@ def _get_queue_position(job_id: str) -> int | None:
         return None
 
 
+def _parse_bool_env(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+FORCE_NO_IMAGES = _parse_bool_env('PDF_TO_EPUB_FORCE_NO_IMAGES', False)
+
+
 def _cleanup_expired_jobs() -> None:
     now = time.time()
     expired_ids: list[str] = []
@@ -266,6 +285,82 @@ def _append_log(job_id: str, line: str) -> None:
         job['updated_at'] = time.time()
 
 
+def _parse_memory_value(value: str) -> float | None:
+    if value == 'n/a':
+        return None
+    return round(float(value), 1)
+
+
+def _format_memory_log(label: str, rss_mb: float | None, peak_rss_mb: float | None) -> str:
+    current = 'n/a' if rss_mb is None else f'{rss_mb:.1f} MB'
+    peak = 'n/a' if peak_rss_mb is None else f'{peak_rss_mb:.1f} MB'
+    pretty_label = label.replace('-', ' ')
+    return f'Memory [{pretty_label}]: current {current}, peak {peak}'
+
+
+def _update_job_memory(
+    job_id: str,
+    *,
+    rss_mb: float | None = None,
+    peak_rss_mb: float | None = None,
+    label: str | None = None,
+) -> None:
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if job is None:
+            return
+        memory = job.setdefault(
+            'memory',
+            {'rss_mb': None, 'peak_rss_mb': None, 'checkpoints': []},
+        )
+        if rss_mb is not None:
+            memory['rss_mb'] = round(rss_mb, 1)
+        peak_candidates = [memory.get('peak_rss_mb'), peak_rss_mb, rss_mb]
+        valid_peaks = [round(v, 1) for v in peak_candidates if v is not None]
+        if valid_peaks:
+            memory['peak_rss_mb'] = max(valid_peaks)
+        if label:
+            checkpoints = memory.setdefault('checkpoints', [])
+            checkpoints.append(
+                {
+                    'label': label,
+                    'rss_mb': None if rss_mb is None else round(rss_mb, 1),
+                    'peak_rss_mb': None if peak_rss_mb is None else round(peak_rss_mb, 1),
+                }
+            )
+            if len(checkpoints) > MAX_MEMORY_CHECKPOINTS:
+                del checkpoints[:-MAX_MEMORY_CHECKPOINTS]
+        job['updated_at'] = time.time()
+
+
+def _handle_memory_line(job_id: str, line: str) -> bool:
+    match = MEMORY_LINE_RE.match(line.strip())
+    if not match:
+        return False
+    label = match.group('label')
+    rss_mb = _parse_memory_value(match.group('rss'))
+    peak_rss_mb = _parse_memory_value(match.group('peak'))
+    _update_job_memory(job_id, rss_mb=rss_mb, peak_rss_mb=peak_rss_mb, label=label)
+    _append_log(job_id, _format_memory_log(label, rss_mb, peak_rss_mb))
+    return True
+
+
+def _active_job_count() -> int:
+    with jobs_lock:
+        return sum(1 for job in jobs.values() if job['status'] in ('queued', 'running'))
+
+
+def _watch_process_memory(job_id: str, pid: int, stop_event: threading.Event) -> None:
+    while True:
+        snapshot = get_process_memory_snapshot(pid)
+        rss_mb = snapshot.get('rss_mb')
+        peak_rss_mb = snapshot.get('peak_rss_mb')
+        if rss_mb is not None or peak_rss_mb is not None:
+            _update_job_memory(job_id, rss_mb=rss_mb, peak_rss_mb=peak_rss_mb)
+        if stop_event.wait(MEMORY_SAMPLE_INTERVAL_SECONDS):
+            break
+
+
 def _parse_progress(line: str, current_progress: int) -> tuple[int, str | None]:
     match = re.search(r'(?:OCR page|Page)\s+(\d+)/(\d+)', line)
     if match:
@@ -299,7 +394,9 @@ def _stream_process_output(job_id: str, process: subprocess.Popen[str]) -> None:
             continue
         if chunk in '\r\n':
             if buffer.strip():
-                _append_log(job_id, buffer)
+                handled_memory = _handle_memory_line(job_id, buffer)
+                if not handled_memory:
+                    _append_log(job_id, buffer)
                 job = _get_job(job_id)
                 progress, message = _parse_progress(buffer, job.get('progress', 0))
                 update_fields = {'progress': progress}
@@ -310,7 +407,8 @@ def _stream_process_output(job_id: str, process: subprocess.Popen[str]) -> None:
             continue
         buffer += chunk
     if buffer.strip():
-        _append_log(job_id, buffer)
+        if not _handle_memory_line(job_id, buffer):
+            _append_log(job_id, buffer)
 
 
 def _run_job(job_id: str) -> None:
@@ -360,8 +458,18 @@ def _run_job(job_id: str) -> None:
         )
         return
 
+    stop_event = threading.Event()
+    watcher = threading.Thread(
+        target=_watch_process_memory,
+        args=(job_id, process.pid, stop_event),
+        daemon=True,
+    )
+    watcher.start()
+
     _stream_process_output(job_id, process)
     return_code = process.wait()
+    stop_event.set()
+    watcher.join(timeout=2)
 
     if return_code == 0 and output_path.exists():
         _update_job(
@@ -373,10 +481,14 @@ def _run_job(job_id: str) -> None:
         )
         return
 
+    if return_code in (-9, 137):
+        message = 'Conversion was terminated by memory pressure. Try the hosted job again after the current load clears, or use the command-line script for very large PDFs.'
+    else:
+        message = 'Conversion failed. See logs for details.'
     _update_job(
         job_id,
         status='failed',
-        message='Conversion failed. See logs for details.',
+        message=message,
         finished_at=time.time(),
     )
 
@@ -391,7 +503,7 @@ async def create_conversion_job(
     pdf: UploadFile = File(...),
     title: str = Form(''),
     lang: str = Form('eng'),
-    scale: float = Form(1.5),
+    scale: float = Form(DEFAULT_SCALE),
     no_images: bool = Form(False),
 ) -> JSONResponse:
     _cleanup_expired_jobs()
@@ -399,9 +511,6 @@ async def create_conversion_job(
     filename = pdf.filename or 'upload.pdf'
     if not filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail='Only PDF uploads are supported.')
-
-    # Clamp scale to avoid runaway memory on the Render Starter instance.
-    scale = min(scale, MAX_SCALE)
 
     job_id = uuid.uuid4().hex
     work_dir = TEMP_ROOT / job_id
@@ -411,6 +520,9 @@ async def create_conversion_job(
     output_name = _sanitize_stem(Path(filename).stem) + '.epub'
     input_path = work_dir / input_name
     output_path = work_dir / output_name
+    requested_scale = scale
+    effective_scale = min(scale, MAX_SCALE) if MAX_SCALE > 0 else scale
+    effective_no_images = no_images or FORCE_NO_IMAGES
 
     size_limit = MAX_UPLOAD_MB * 1024 * 1024
     total_bytes = 0
@@ -443,10 +555,13 @@ async def create_conversion_job(
         'source_name': filename,
         'title': title.strip(),
         'lang': lang,
-        'scale': scale,
-        'no_images': no_images,
+        'scale': effective_scale,
+        'requested_scale': requested_scale,
+        'no_images': effective_no_images,
+        'requested_no_images': no_images,
         'max_pages': MAX_PAGES,
         'logs': [],
+        'memory': {'rss_mb': None, 'peak_rss_mb': None, 'checkpoints': []},
     }
     with jobs_lock:
         jobs[job_id] = job
@@ -454,6 +569,13 @@ async def create_conversion_job(
     # still report a meaningful status to the browser instead of a bare 404.
     _save_job_to_disk(job)
 
+    if effective_scale != requested_scale:
+        _append_log(
+            job_id,
+            f'Adjusted scale from {requested_scale:.2f}x to {effective_scale:.2f}x to reduce hosted memory usage.',
+        )
+    if effective_no_images and not no_images:
+        _append_log(job_id, 'Embedded page images were disabled by hosted memory policy.')
     _job_queue.put(job_id)
 
     return JSONResponse(
@@ -489,6 +611,9 @@ def get_job_status(job_id: str) -> dict:
         'source_name': job['source_name'],
         'queue_position': queue_position,
         'logs': job.get('logs', []),
+        'memory': job.get('memory', {}),
+        'scale': job.get('scale'),
+        'no_images': job.get('no_images'),
     }
     if job['status'] == 'completed':
         response['download_url'] = f'/api/jobs/{job_id}/download'
